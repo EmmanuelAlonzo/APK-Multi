@@ -327,6 +327,7 @@ const styles = StyleSheet.create({
         padding: 12,
         fontSize: 16,
         backgroundColor: '#fafafa',
+        color: '#000', // Enforce black text
     },
     gradeContainer: {
         flexDirection: 'row',

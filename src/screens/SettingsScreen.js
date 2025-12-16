@@ -103,6 +103,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         minHeight: 80,
         textAlignVertical: 'top',
+        color: '#000',
     },
     button: {
         backgroundColor: '#2196F3',

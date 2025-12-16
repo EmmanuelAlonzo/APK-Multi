@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     title: { fontSize: 20, fontWeight: 'bold' },
     content: { padding: 20 },
     label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
-    input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 20 },
+    input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 20, color: '#000', backgroundColor: '#fff' },
     button: { backgroundColor: '#9C27B0', padding: 15, borderRadius: 8, alignItems: 'center' },
     buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
     gradeContainer: { flexDirection: 'row', marginBottom: 20, height: 50 },
