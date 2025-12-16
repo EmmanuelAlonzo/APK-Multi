@@ -1,0 +1,9 @@
+node_modules/
+.expo/
+npm-debug.log
+yarn-error.log
+android/
+ios/
+.git/
+*.tgz
+*.tar.gz
