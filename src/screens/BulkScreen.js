@@ -36,6 +36,21 @@ export default function BulkScreen({ navigation }) {
 
             // FILTERING LOGIC
             let rows = parsed.data;
+
+            // NEW: Constraints (1. Filter Required if size >= 10, 2. Exception for small batches)
+            if (!filterGrade) {
+                if (rows.length >= 10) {
+                    Alert.alert(
+                        "Filtro Requerido", 
+                        `El archivo contiene ${rows.length} registros. Para evitar errores en lotes grandes, por favor selecciona un filtro de Grado.`
+                    );
+                    setLoading(false);
+                    setStatus('');
+                    return;
+                }
+                // If < 10, strictly implicitly allowed (Test Mode)
+            }
+            
             if (filterGrade.trim()) {
                 const target = parseFloat(filterGrade).toFixed(2); // Normalize user input
                 rows = rows.filter(row => {
@@ -117,11 +132,16 @@ export default function BulkScreen({ navigation }) {
                     batch = `${sequenceMap[normGrade].dateStr}I${sequenceMap[normGrade].seq.toString().padStart(3, '0')}`;
                 }
                 
-                // SKU Logic (Simplified map)
+                // SKU Logic (Updated from Image)
                 const SKU_MAP = {
-                    "5.50": "10000267", "6.00": "10000268", "6.50": "10000269",
-                    "7.00": "10000271", "8.00": "10000272", "9.00": "10000273",
-                    "10.00": "10000274", "12.00": "10000275"
+                    "5.50": "10000241", 
+                    "6.00": "10000285", 
+                    "6.50": "10000248",
+                    "7.00": "10000271", 
+                    "8.00": "10000003", 
+                    "9.00": "10000288",
+                    "10.00": "10000287", 
+                    "12.00": "10000240"
                 };
                 const sku = SKU_MAP[normGrade] || "00000000";
 
