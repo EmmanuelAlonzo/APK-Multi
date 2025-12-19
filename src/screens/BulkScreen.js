@@ -3,39 +3,47 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ScrollView,
 import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
 import Papa from 'papaparse';
-import { fetchSheetCsv, getNextBatchSequence } from '../utils/api';
+import { fetchBulkData, getNextBatchSequence } from '../utils/api'; // Removed fetchSheetCsv
 
 export default function BulkScreen({ navigation }) {
-    const [sheetUrl, setSheetUrl] = useState('');
+    
     const [filterGrade, setFilterGrade] = useState(''); // NEW: Filter by Grade
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState('');
 
     const handleGenerate = async () => {
-        if (!sheetUrl) {
-            Alert.alert("Error", "Ingresa la URL de la hoja de cálculo");
-            return;
-        }
-
+        // Validation of sheetUrl is no longer needed as we use the stored one.
+        
         setLoading(true);
-        setStatus('Obteniendo CSV...');
+        setStatus('Consultando datos...');
 
         try {
-            // 1. Fetch CSV
-            const csvText = await fetchSheetCsv(sheetUrl);
+            // 1. Fetch Data directly from Script (JSON)
+            // This replaces fetching CSV and parsing it locally.
+            // The script now returns [ { Grade: "...", ... }, ... ]
+            const rawRows = await fetchBulkData();
             
-            // 2. Parse CSV
-            const parsed = Papa.parse(csvText, {
-                header: true,
-                skipEmptyLines: true
-            });
-
-            if (!parsed.data || parsed.data.length === 0) {
-                throw new Error("CSV vacío o inválido");
+            if (!rawRows || rawRows.length === 0) {
+                 throw new Error("La hoja de datos está vacía.");
             }
 
+            // FILTER: Remove invalid rows (Headers, Empty Weights)
+            let rows = rawRows.filter(r => {
+                const w = parseFloat(r.Weight);
+                // Must have valid weight, and Batch must not be header
+                return w > 0 && r.Batch && r.Batch !== 'Batch' && r.Batch !== 'Lote';
+            });
+            
+            if (rows.length === 0) {
+                throw new Error("No se encontraron registros válidos (con Peso > 0).");
+            }
+            
+            // rows is already an array of objects, no need for Papa Parse or header mapping if script does it cleanly.
+            // However, script does simple clean.
+            // Adjust logic below to use 'rows' directly.
+
             // FILTERING LOGIC
-            let rows = parsed.data;
+            // let rows = parsed.data; // This line is now redundant as 'rows' is already the parsed data.
 
             // NEW: Constraints (1. Filter Required if size >= 10, 2. Exception for small batches)
             if (!filterGrade) {
@@ -77,7 +85,13 @@ export default function BulkScreen({ navigation }) {
 
             for (const row of rows) {
                 // Map columns
-                const getCol = (name) => row[Object.keys(row).find(k => k.toLowerCase() === name.toLowerCase())] || '';
+                // Safety Check: ensure row is object
+                if (typeof row !== 'object' || row === null) continue;
+
+                const getCol = (name) => {
+                    const key = Object.keys(row).find(k => k.toLowerCase() === name.toLowerCase());
+                    return key ? row[key] : '';
+                };
                 
                 const data = {
                     SAE: getCol('SAE') || 'SAE 1010',
@@ -90,7 +104,11 @@ export default function BulkScreen({ navigation }) {
                 };
 
                 const gradeVal = data.Grade;
-                const normalizeGrade = (g) => parseFloat(g).toFixed(2);
+                const normalizeGrade = (g) => {
+                     try {
+                        return g ? parseFloat(g).toFixed(2) : "0.00";
+                     } catch(e) { return "0.00"; }
+                };
                 const normGrade = normalizeGrade(gradeVal);
                 
                 let batch = '';
@@ -98,10 +116,8 @@ export default function BulkScreen({ navigation }) {
                 // STRATEGY: Use Existing Batch if Available (Recommended)
                 if (data.ExistingBatch) {
                     batch = data.ExistingBatch;
-                    // Log for debugging
-                    // console.log(`Using existing batch for ${normGrade}: ${batch}`);
                 } else {
-                    // Fallback: Generate Sequence Logic (Only if Sheet lacks 'Lote' column)
+                    // Fallback: Generate Sequence Logic
                     if (!sequenceMap[normGrade]) {
                         try {
                             const seqData = await getNextBatchSequence(normGrade);
@@ -114,6 +130,7 @@ export default function BulkScreen({ navigation }) {
                                 baseDate: new Date()
                             };
                         } catch (e) {
+                             console.warn("Seq fetch failed, using local fallback", e);
                              // Fallback date
                              const now = new Date();
                              const dStr = `${now.getFullYear().toString().slice(-2)}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}`;
@@ -184,15 +201,9 @@ export default function BulkScreen({ navigation }) {
             </View>
 
             <View style={styles.content}>
-                <Text style={styles.label}>URL de Google Sheet:</Text>
-                <TextInput
-                    style={styles.input}
-                    value={sheetUrl}
-                    onChangeText={setSheetUrl}
-                    placeholder="https://docs.google.com/spreadsheets/..."
-                />
-
-                <Text style={styles.label}>Filtrar por Grado/Medida (Opcional):</Text>
+                {/* Removed URL Input */}
+                
+                <Text style={styles.label}>Filtrar por Grado/Medida (OPCIONAL):</Text>
                 <View style={styles.gradeContainer}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {['5.50', '6.00', '6.50', '7.00', '8.00', '9.00', '10.00', '11.00', '12.00'].map((g) => (
@@ -238,7 +249,7 @@ const generateHtml = (rows) => {
         
         // Use bwip-js API for consistent rendering
         // bcid=code128, text=value, scale=2, height=10 (mm approx inverted?), incltext=true
-        const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${barcodeValue}&scaleY=0.5&scaleX=0.4&height=10&includeText&textxalign=center`;
+        const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(barcodeValue)}&scaleY=0.5&scaleX=0.4&height=10&includeText&textxalign=center`;
 
         return `
         <div class="page">

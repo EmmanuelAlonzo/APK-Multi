@@ -3,10 +3,18 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, SafeAreaVie
 import { saveScriptUrl, getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage';
 
 export default function SettingsScreen({ navigation, route }) {
+    // URL is now read-only logic or just fixed. 
+    // Requirement: "Elimina la opcion de editar el script... que nadie pueda tocarlo"
+    // We will just show it as info or hide it? "que si se debe actualizar sea mediante este codigo"
+    // So we will remove the input.
+    
     const [url, setUrl] = useState('');
-    const [loading, setLoading] = useState(true);
+    const { user, logout } = React.useContext(require('../context/AuthContext').AuthContext);
+    const { updateUserPin } = require('../utils/api');
 
-    // If param 'isInitial' is true, user cannot go back without saving
+    const [newPin, setNewPin] = useState('');
+    const [changingPin, setChangingPin] = useState(false);
+
     const isInitial = route.params?.isInitial ?? false;
 
     useEffect(() => {
@@ -16,25 +24,55 @@ export default function SettingsScreen({ navigation, route }) {
     const loadSettings = async () => {
         const savedUrl = await getScriptUrl();
         setUrl(savedUrl || DEFAULT_SCRIPT_URL);
-        setLoading(false);
     };
 
-    const handleSave = async () => {
-        if (!url.trim()) {
-            Alert.alert("Error", "La URL no puede estar vacía");
+    const handleChangePin = async () => {
+        if (!user || !user.name) {
+            Alert.alert("Error", "No hay usuario identificado para cambiar PIN");
             return;
         }
+        if (!newPin.trim() || newPin.length < 4) {
+             Alert.alert("Error", "El PIN debe tener al menos 4 dígitos");
+             return;
+        }
 
-        await saveScriptUrl(url.trim());
-        Alert.alert("Éxito", "Configuración guardada", [
-            { text: "OK", onPress: () => {
-                if (isInitial) {
-                    navigation.replace('Home');
-                } else {
-                    navigation.goBack();
+        setChangingPin(true);
+        try {
+            const success = await updateUserPin(user.name, newPin);
+            if (success) {
+                Alert.alert("Éxito", "Tu PIN ha sido actualizado");
+                setNewPin('');
+            } else {
+                Alert.alert("Error", "No se pudo actualizar el PIN. Verifica tu conexión.");
+            }
+        } catch (e) {
+            Alert.alert("Error", e.message);
+        } finally {
+            setChangingPin(false);
+        }
+    };
+
+    const handleLogout = async () => {
+        Alert.alert(
+            "Cerrar Sesión",
+            "¿Estás seguro de que deseas salir?",
+            [
+                { text: "Cancelar", style: "cancel" },
+                { 
+                    text: "Salir", 
+                    style: "destructive", 
+                    onPress: async () => {
+                       await logout();
+                       // Force reset to Login to avoid staying on Settings
+                       // (since Settings exists in both Auth and App stacks)
+                       navigation.reset({
+                           index: 0,
+                           routes: [{ name: 'Login' }],
+                       });
+                    }
                 }
-            }}
-        ]);
+            ]
+        );
     };
 
     return (
@@ -42,26 +80,48 @@ export default function SettingsScreen({ navigation, route }) {
             <View style={styles.content}>
                 <Text style={styles.title}>Configuración</Text>
                 
-                <Text style={styles.label}>URL del Google Apps Script:</Text>
-                <Text style={styles.description}>
-                    Esta URL conecta tu app con la hoja de cálculo para sincronizar las secuencias y guardar datos.
-                </Text>
-                
-                <TextInput
-                    style={styles.input}
-                    value={url}
-                    onChangeText={setUrl}
-                    placeholder="https://script.google.com/..."
-                    multiline
-                />
+                {/* Script Info Only (No Edit) */}
+                <View style={styles.infoBox}>
+                    <Text style={styles.label}>Estado de Conexión:</Text>
+                    <Text style={styles.description}>
+                        Conectado a Google Apps Script (V8 - Roles)
+                    </Text>
+                    <Text style={[styles.description, {fontSize: 10}]}>{url}</Text>
+                </View>
 
-                <TouchableOpacity style={styles.button} onPress={handleSave}>
-                    <Text style={styles.buttonText}>Guardar y Continuar</Text>
-                </TouchableOpacity>
+                {/* --- SECCIÓN CAMBIAR PIN --- */}
+                {!isInitial && user && (
+                    <View style={styles.section}>
+                        <View style={styles.divider} />
+                        <Text style={styles.label}>Cambiar Contraseña (PIN)</Text>
+                        <Text style={styles.description}>
+                            Usuario actual: {user.name}
+                        </Text>
+                        
+                        <TextInput
+                            style={styles.input}
+                            value={newPin}
+                            onChangeText={setNewPin}
+                            placeholder="Nuevo PIN (ej. 1234)"
+                            placeholderTextColor="#888"
+                            keyboardType="numeric"
+                            secureTextEntry
+                        />
+                         <TouchableOpacity style={[styles.button, styles.pinButton]} onPress={handleChangePin} disabled={changingPin}>
+                            <Text style={styles.buttonText}>{changingPin ? "Actualizando..." : "Actualizar PIN"}</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.divider} />
+                         <TouchableOpacity style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
+                            <Text style={styles.buttonText}>Cerrar Sesión</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
 
                 {!isInitial && (
                     <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => navigation.goBack()}>
-                        <Text style={styles.cancelButtonText}>Cancelar</Text>
+                        <Text style={styles.cancelButtonText}>Volver</Text>
                     </TouchableOpacity>
                 )}
             </View>
@@ -123,5 +183,26 @@ const styles = StyleSheet.create({
     cancelButtonText: {
         color: '#666',
         fontSize: 16,
+    },
+    section: {
+        marginTop: 20,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#ddd',
+        marginBottom: 20,
+    },
+    pinButton: {
+        backgroundColor: '#FF9800', 
+    },
+    logoutButton: {
+        backgroundColor: '#f44336', // Red
+        marginTop: 10,
+    },
+    infoBox: {
+        backgroundColor: '#e3f2fd',
+        padding: 10,
+        borderRadius: 8,
+        marginBottom: 20
     }
 });

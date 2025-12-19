@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, StyleSheet, Button, TouchableOpacity, Alert, Modal, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { saveScanToHistory } from '../utils/storage'; 
+import { AuthContext } from '../context/AuthContext'; 
 
 export default function ScannerScreen({ navigation }) {
+    const { user } = useContext(AuthContext); // Get authenticated user
     const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
     const [scannedData, setScannedData] = useState(null);
@@ -38,6 +40,20 @@ export default function ScannerScreen({ navigation }) {
             dataToSave = parsed;
         } catch (e) {
             // Not JSON, keep as string
+        }
+
+        // Attach Operator
+        if (typeof dataToSave === 'object') {
+            dataToSave.Operator = user ? user.name : "Unknown";
+        } else {
+            // Converts string to object to attach operator?
+            // Or we just save object wrapper? 
+            // Current storage handles mixed, but let's wrap it to be consistent with sheet columns.
+            dataToSave = {
+                RawData: dataToSave,
+                Operator: user ? user.name : "Unknown",
+                Date: new Date().toISOString()
+            };
         }
 
         const success = await saveScanToHistory(dataToSave);

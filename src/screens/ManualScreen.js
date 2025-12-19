@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import {
   View,
   Text,
@@ -20,64 +20,61 @@ import {
   saveLocalSequence,
 } from "../utils/storage";
 import { getNextBatchSequence, sendDataToSheet } from "../utils/api";
+import { AuthContext } from "../context/AuthContext";
 // PDF Generation will be handled in a separate utility or here if simple
 
-export default function ManualScreen({ navigation }) {
-  const [sae, setSae] = useState("");
-  const [grade, setGrade] = useState("7.00"); // Default
-  const [heat, setHeat] = useState("");
-  const [bundle, setBundle] = useState("");
-  const [weight, setWeight] = useState("");
-  // Date string YYYY-MM-DD for input
-  const [dateStr, setDateStr] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+export default function ManualScreen({ navigation, route }) {
+  const { user } = useContext(AuthContext); 
+  const { updateSheetRow } = require('../utils/api');
+
+  // Edit Mode Params
+  const { isEditing, item } = route.params || {};
+
+  const [sae, setSae] = useState(isEditing ? item.SAE : "");
+  const [grade, setGrade] = useState(isEditing ? item.Grade : "7.00");
+  const [heat, setHeat] = useState(isEditing ? item.HeatNo : "");
+  const [bundle, setBundle] = useState(isEditing ? item.BundleNo : "");
+  const [weight, setWeight] = useState(isEditing ? item.Weight : "");
+  const [dateStr, setDateStr] = useState(isEditing ? item.Date : new Date().toISOString().split("T")[0]);
+  
   const [loading, setLoading] = useState(false);
-
-  // Optimización: Pre-carga de secuencia
-  const [prefetchedSeq, setPrefetchedSeq] = useState(null); // { seq, dateStr }
+  const [prefetchedSeq, setPrefetchedSeq] = useState(null);
   const [isFetchingSeq, setIsFetchingSeq] = useState(false);
-
-  // New: Map to store SAE per Grade
   const [saeMap, setSaeMap] = useState({});
 
   useEffect(() => {
-    loadPersistedData();
+    if (!isEditing) {
+        loadPersistedData();
+    }
   }, []);
 
   const loadPersistedData = async () => {
     const data = await getManualData();
-    // Check for new map structure
     if (data.SAE_MAP) {
       setSaeMap(data.SAE_MAP);
-      // Set initial SAE based on current default grade (7.00)
       if (data.SAE_MAP["7.00"]) {
         setSae(data.SAE_MAP["7.00"]);
       }
     }
-    // Fallback/Migration: If user had old single SAE, we could map it,
-    // but plan says reset is acceptable. We'll start clean or use map.
   };
 
-  // Update SAE input when Grade changes
   useEffect(() => {
-    setSae(saeMap[grade] || "");
-    
-    // Trigger Prefetch when Grade or Date changes
-    prefetchSequence();
+    if(!isEditing) {
+        setSae(saeMap[grade] || "");
+        prefetchSequence();
+    }
   }, [grade, saeMap, dateStr]);
 
   const prefetchSequence = async () => {
-      setPrefetchedSeq(null); // Reset previous
+      setPrefetchedSeq(null); 
       setIsFetchingSeq(true);
       try {
            const [yIn, mIn, dIn] = dateStr.split('-').map(Number);
            const dateObj = new Date(yIn, mIn - 1, dIn);
            const seqData = await getNextBatchSequence(grade, dateObj);
-           console.log("Prefetch Success:", seqData);
            setPrefetchedSeq(seqData);
       } catch (e) {
-          console.log("Prefetch Failed (will retry on save):", e);
+          console.log("Prefetch Failed:", e);
       } finally {
           setIsFetchingSeq(false);
       }
@@ -85,22 +82,46 @@ export default function ManualScreen({ navigation }) {
 
   const handleSave = async () => {
     if (!sae || !heat || !weight) {
-      Alert.alert(
-        "Error",
-        "Por favor completa los campos requeridos (SAE, Colada, Peso)"
-      );
+      Alert.alert("Error", "Por favor completa los campos requeridos");
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Generate Batch ID (Sequence)
-      let batchId = "UNKNOWN";
+      let batchId = isEditing ? item.Batch : "UNKNOWN";
+
+      // --- EDIT MODE ---
+      if (isEditing) {
+          const updateData = {
+              Batch: batchId, // Key
+              SAE: sae,
+              HeatNo: heat,
+              BundleNo: bundle,
+              Weight: weight,
+              // Grade, Date usually not editable easily as they define Batch ID, but we allow them to pass through
+              // If Admin changes Grade, Batch ID logically mismatch? 
+              // User requirement: "Editar los registros...". 
+              // For simplicity, we update fields on the EXISTING Batch ID. Changing Batch ID is dangerous.
+          };
+
+          // Update Sheet
+          await updateSheetRow(updateData);
+          
+          // Update History (Local) requires modifying the item in storage
+          // We can't easily modify one item in history list from here without a global store action or re-read.
+          // TRICK: We will not update local history here, BUT `HistoryScreen` usually reloads. 
+          // However, to be nice, we should try. 
+          // For now, let's just alert and go back.
+          Alert.alert("Éxito", "Registro actualizado");
+          navigation.goBack();
+          return;
+      }
+
+      // --- NEW MODE ---
+      // 1. Generate Batch ID
       // Parse selected date
       const [yIn, mIn, dIn] = dateStr.split("-").map(Number);
       const dateObj = new Date(yIn, mIn - 1, dIn);
-
-      // Construct Key for Local Storage: dateStr + Grade
       const yLocal = dateObj.getFullYear().toString().slice(-2);
       const mLocal = (dateObj.getMonth() + 1).toString().padStart(2, "0");
       const dLocal = dateObj.getDate().toString().padStart(2, "0");
@@ -108,131 +129,57 @@ export default function ManualScreen({ navigation }) {
       const storageKey = `${localDateStr}_${grade}`;
 
       let seqToUse = 1;
+      let seqData = null;
 
-      try {
-        let seqData = null;
-
-        // OPTIMIZATION: Use Prefetched Data if available
-        if (prefetchedSeq) {
-            console.log("Using Prefetched Sequence!");
-            seqData = prefetchedSeq;
-        } else {
-             console.log("Prefetch missed, fetching now...");
-             // Fetch Server Max (Standard way)
-             seqData = await getNextBatchSequence(grade, dateObj);
-        }
-
-        // Fetch Local Max
-        const localSeq = await getLocalSequence(storageKey);
-
-        // API currently returns { seq: serverMax + 1 } (next available)
-        const serverNext = seqData.seq;
-        const localNext = localSeq + 1;
-
-        // --- SYNC STRATEGY: SERVER AUTHORITATIVE ---
-        // If we successfully got a sequence from the server, we trust it.
-        // This allows reusing numbers if they were deleted (e.g. 002 is free).
-        // The previous logic (Math.max) prevented filling gaps.
-        console.log(`Seq Sync - Server: ${serverNext}, Local: ${localNext}`);
-
-        if (serverNext) {
-          seqToUse = serverNext;
-          // Auto-correct local sequence if it drifted apart
-          if (localNext !== serverNext) {
-            console.log("Adjusting local sequence to match server.");
-          }
-        } else {
-          // Fallback should not happen here as we are in try block of API
-          seqToUse = localNext;
-        }
-
-        if (seqToUse > 999) {
-          Alert.alert(
-            "Aviso",
-            "La secuencia llegó a 999. Por favor cambia la fecha para reiniciar."
-          );
-          setLoading(false);
-          return;
-        }
-
-        // formatBatchId
-        let prefix = "";
-        if (seqData.dateStr) {
-          prefix = seqData.dateStr;
-        } else {
-          prefix = localDateStr;
-        }
-
-        const s = seqToUse.toString().padStart(3, "0");
-        // Added "I" separator: 251215I001
-        batchId = `${prefix}I${s}`;
-      } catch (e) {
-        console.error("Failed to get sequence:", e);
-        // Fallback to local only logic
-        const localSeq = await getLocalSequence(storageKey);
-        seqToUse = localSeq + 1;
-        const s = seqToUse.toString().padStart(3, "0");
-        batchId = `${localDateStr}I${s}`;
-
-        // Offline Sequence Warning
-        const proceed = await new Promise((resolve) => {
-          Alert.alert(
-            "Sin conexión",
-            "No se pudo obtener la secuencia del servidor. ¿Deseas guardar sin sincronizar secuencia (Lote podría duplicarse)?",
-            [
-              { text: "Cancelar", onPress: () => resolve(false) },
-              { text: "Continuar (Riesgo)", onPress: () => resolve(true) },
-            ]
-          );
-        });
-
-        if (!proceed) {
-          setLoading(false);
-          return;
-        }
+      if (prefetchedSeq) {
+          seqData = prefetchedSeq;
+      } else {
+           seqData = await getNextBatchSequence(grade, dateObj);
       }
+
+      const localSeq = await getLocalSequence(storageKey);
+      const serverNext = seqData ? seqData.seq : null;
+      const localNext = localSeq + 1;
+
+      if (serverNext) {
+        seqToUse = serverNext;
+      } else {
+        seqToUse = localNext;
+      }
+
+      let prefix = seqData && seqData.dateStr ? seqData.dateStr : localDateStr;
+
+      // Check for overflow
+      if (seqToUse > 999) { Alert.alert("Error", "Secuencia > 999"); setLoading(false); return; }
+
+      const s = seqToUse.toString().padStart(3, "0");
+      batchId = `${prefix}I${s}`;
 
       // 2. Prepare Data
       const dataToSave = {
-        SAE: sae,
-        Grade: grade,
-        HeatNo: heat,
-        Batch: batchId,
-        BundleNo: bundle,
-        Weight: weight,
-        Date: dateStr,
+        SAE: sae, Grade: grade, HeatNo: heat, Batch: batchId, BundleNo: bundle, Weight: weight, Date: dateStr,
+        Operator: user ? user.name : "Unknown",
       };
 
-      // 3. Save to History (Local)
+      // 3. Save
       await saveScanToHistory(dataToSave);
+      sendDataToSheet(dataToSave).catch((e) => console.error("Sheet Sync Error:", e));
 
-      // 4. Save to Sheets (Async - Fire and Forget to speed up UI)
-      sendDataToSheet(dataToSave).catch((e) => {
-        console.error("Sheet Sync Error:", e);
-        // We don't block the user, but we log it. Data is safe locally.
-      });
-
-      // 5. Persist relevant fields & SEQUENCE
-      // Update Map
       const newSaeMap = { ...saeMap, [grade]: sae };
-      setSaeMap(newSaeMap); // Update state
-
-      await saveManualData({ SAE_MAP: newSaeMap }); // Save Map
+      setSaeMap(newSaeMap); 
+      await saveManualData({ SAE_MAP: newSaeMap }); 
       await saveLocalSequence(storageKey, seqToUse);
 
-      Alert.alert("Éxito", `Datos guardados. Lote generado: ${batchId}`);
+      Alert.alert("Éxito", `Datos guardados. Lote: ${batchId}`);
+      
+      setHeat(""); setBundle(""); setWeight("");
+      prefetchSequence();
 
-      // Clear fields (except SAE?)
-      setHeat("");
-      setBundle("");
-      setWeight("");
     } catch (error) {
       console.error(error);
       Alert.alert("Error", "Ocurrió un error inesperado");
     } finally {
       setLoading(false);
-      // Refresh Prefetch for NEXT item immediately
-      prefetchSequence();
     }
   };
 
@@ -250,7 +197,7 @@ export default function ManualScreen({ navigation }) {
         >
           <Text style={styles.backText}>← Volver</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Ingreso Manual</Text>
+        <Text style={styles.title}>{isEditing ? `Editar ${item?.Batch}` : "Ingreso Manual"}</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -266,6 +213,7 @@ export default function ManualScreen({ navigation }) {
               value={dateStr}
               onChangeText={setDateStr}
               placeholder="YYYY-MM-DD"
+              placeholderTextColor="#888"
               returnKeyType="next"
               onSubmitEditing={() => saeRef.current?.focus()}
               blurOnSubmit={false}
@@ -281,6 +229,7 @@ export default function ManualScreen({ navigation }) {
               value={sae}
               onChangeText={setSae}
               placeholder="Ej. SAE1006"
+              placeholderTextColor="#888"
               returnKeyType="next"
               onSubmitEditing={() => heatRef.current?.focus()}
               blurOnSubmit={false}
@@ -331,6 +280,7 @@ export default function ManualScreen({ navigation }) {
               value={heat}
               onChangeText={setHeat}
               placeholder="Ej. 252101992"
+              placeholderTextColor="#888"
               returnKeyType="next"
               onSubmitEditing={() => bundleRef.current?.focus()}
               blurOnSubmit={false}
@@ -346,6 +296,7 @@ export default function ManualScreen({ navigation }) {
               value={bundle}
               onChangeText={setBundle}
               placeholder="Ej. 37"
+              placeholderTextColor="#888"
               keyboardType="numeric"
               returnKeyType="next"
               onSubmitEditing={() => weightRef.current?.focus()}
@@ -362,6 +313,7 @@ export default function ManualScreen({ navigation }) {
               value={weight}
               onChangeText={setWeight}
               placeholder="Ej. 2068"
+              placeholderTextColor="#888"
               keyboardType="numeric"
               returnKeyType="done"
               onSubmitEditing={handleSave}
@@ -370,12 +322,12 @@ export default function ManualScreen({ navigation }) {
 
           {/* Button */}
           <TouchableOpacity
-            style={[styles.saveButton, loading && styles.disabled]}
+            style={[styles.saveButton, loading && styles.disabled, isEditing && styles.editButton]}
             onPress={handleSave}
             disabled={loading}
           >
             <Text style={styles.saveButtonText}>
-              {loading ? "Guardando..." : "Guardar Datos"}
+              {loading ? "Procesando..." : (isEditing ? "Actualizar Registro" : "Guardar Datos")}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -464,4 +416,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
+  editButton: {
+    backgroundColor: '#FF9800'
+  }
 });

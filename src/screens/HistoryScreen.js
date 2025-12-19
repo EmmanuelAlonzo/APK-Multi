@@ -3,9 +3,17 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, SafeAreaView
 import { useFocusEffect } from '@react-navigation/native';
 import { getScanHistory, clearHistory, deleteHistoryItem, decrementLocalSequence, getLocalSequence } from '../utils/storage';
 import { deleteFromSheet } from '../utils/api';
+import { AuthContext } from '../context/AuthContext';
 
 export default function HistoryScreen({ navigation }) {
     const [history, setHistory] = useState([]);
+    const { user } = React.useContext(AuthContext);
+
+    // Roles
+    const role = user?.role?.toLowerCase() || 'auxiliar';
+    const canEdit = ['administrador', 'supervisor', 'verificador'].includes(role);
+    const canClearAll = role === 'administrador'; 
+    // All can delete single items per user request
 
     useFocusEffect(
         useCallback(() => {
@@ -36,49 +44,53 @@ export default function HistoryScreen({ navigation }) {
         );
     };
 
+    // State to lock delete actions (Debounce/Lock)
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const handleDelete = async (id) => {
-        // Find item to delete
-        const item = history.find(i => i.id === id);
-        if (item && item.data && item.data.Batch) {
-             // 1. Delete from Sheet (Background) - Fire and forget
-             // Now that we have the proper script, we can enable this.
-             // WE MUST PASS GRADE to distinguish between batches like 251215I001 (Grade 7) and 251215I001 (Grade 8)
-             deleteFromSheet(item.data.Batch, item.data.Grade).catch(err => console.error("Background delete failed", err));
+        if (isDeleting) return; // Prevent double tap / rapid fire
+        setIsDeleting(true);
 
-            // 2. Smart Decrement Logic
-            if (item.data.Grade && item.data.Date) {
-                 try {
-                    // Reconstruct Key: YYMMDD_Grade
-                    const [y, m, d] = item.data.Date.split('-').map(Number);
-                    const dateObj = new Date(y, m - 1, d);
-                    const yLocal = dateObj.getFullYear().toString().slice(-2);
-                    const mLocal = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-                    const dLocal = dateObj.getDate().toString().padStart(2, '0');
-                    const localDateStr = `${yLocal}${mLocal}${dLocal}`;
-                    const storageKey = `${localDateStr}_${item.data.Grade}`;
+        try {
+            // Find item to delete
+            const item = history.find(i => i.id === id);
+            if (item && item.data && item.data.Batch) {
+                 // 1. Delete from Sheet (Background) - Fire and forget
+                 deleteFromSheet(item.data.Batch, item.data.Grade).catch(err => console.error("Background delete failed", err));
 
-                    const currentMax = await getLocalSequence(storageKey);
-                    
-                    const parts = item.data.Batch.split('I');
-                    if (parts.length === 2) {
-                        const seqInBatch = parseInt(parts[1]);
+                // 2. Smart Decrement Logic
+                if (item.data.Grade && item.data.Date) {
+                     try {
+                        const [y, m, d] = item.data.Date.split('-').map(Number);
+                        const dateObj = new Date(y, m - 1, d);
+                        const yLocal = dateObj.getFullYear().toString().slice(-2);
+                        const mLocal = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+                        const dLocal = dateObj.getDate().toString().padStart(2, '0');
+                        const localDateStr = `${yLocal}${mLocal}${dLocal}`;
+                        const storageKey = `${localDateStr}_${item.data.Grade}`;
+
+                        const currentMax = await getLocalSequence(storageKey);
                         
-                        // If we are deleting the CURRENT highest sequence locally, we can decrement.
-                        // Example: Local Max is 5. We delete Batch...005. match! -> Decrement to 4.
-                        // Example: Local Max is 5. We delete Batch...003. No match. Max stays 5.
-                        if (seqInBatch === currentMax) {
-                            console.log("Decrementing sequence for", storageKey);
-                            await decrementLocalSequence(storageKey);
+                        const parts = item.data.Batch.split('I');
+                        if (parts.length === 2) {
+                            const seqInBatch = parseInt(parts[1]);
+                            if (seqInBatch === currentMax) {
+                                await decrementLocalSequence(storageKey);
+                            }
                         }
+                    } catch (e) {
+                        console.error("Error adjusting sequence:", e);
                     }
-                } catch (e) {
-                    console.error("Error adjusting sequence:", e);
                 }
             }
-        }
 
-        await deleteHistoryItem(id);
-        loadHistory();
+            await deleteHistoryItem(id);
+            await loadHistory(); // Await load to ensure UI sync
+        } catch (e) {
+            console.error("Delete error:", e);
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     const renderItem = ({ item }) => {
@@ -97,9 +109,16 @@ export default function HistoryScreen({ navigation }) {
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
                     <Text style={styles.date}>{date}</Text>
-                    <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.deleteBtn}>
-                        <Text style={styles.deleteText}>✖</Text>
-                    </TouchableOpacity>
+                    <View style={{flexDirection: 'row'}}>
+                        {canEdit && (
+                             <TouchableOpacity onPress={() => navigation.navigate('Manual', { isEditing: true, item: item.data })} style={styles.editBtn}>
+                                <Text style={styles.editText}>✎</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.deleteBtn}>
+                            <Text style={styles.deleteText}>✖</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
                 <View style={styles.cardContent}>
                     {content}
@@ -115,9 +134,11 @@ export default function HistoryScreen({ navigation }) {
                     <Text style={styles.backText}>← Volver</Text>
                 </TouchableOpacity>
                 <Text style={styles.title}>Historial</Text>
-                <TouchableOpacity onPress={handleClear} style={styles.clearButton}>
-                    <Text style={styles.clearText}>Limpiar</Text>
-                </TouchableOpacity>
+                {canClearAll && (
+                    <TouchableOpacity onPress={handleClear} style={styles.clearButton}>
+                        <Text style={styles.clearText}>Limpiar</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             {history.length === 0 ? (
@@ -195,6 +216,14 @@ const styles = StyleSheet.create({
     },
     deleteText: {
         color: 'red',
+        fontSize: 16,
+    },
+    editBtn: {
+        paddingHorizontal: 8,
+        marginRight: 5
+    },
+    editText: {
+        color: '#FF9800',
         fontSize: 16,
     },
     cardContent: {

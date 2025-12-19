@@ -81,27 +81,52 @@ export const sendDataToSheet = async (data) => {
     }
 };
 
-export const fetchSheetCsv = async (sheetUrl) => {
-    // We can fetch directly if the sheet is published as CSV or use the proxy strategy if needed.
-    // However, from mobile, we might hit CORS if we fetch directly from docs.google.com?
-    // Actually, mobile apps (native) don't have CORS in the same way, but Expo uses fetch which *might* respect it if using Hermes?
-    // No, usually native fetch is fine.
-    
-    // Convert edit URL to export URL
-    let exportUrl = sheetUrl;
-    if (exportUrl.includes('/edit')) {
-        exportUrl = exportUrl.replace(/\/edit.*$/, '/export?format=csv');
-    }
+export const fetchBulkData = async () => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) throw new Error("Script URL not configured");
 
     try {
-        const response = await fetch(exportUrl);
-        if (!response.ok) throw new Error('Failed to fetch CSV');
-        return await response.text();
+        const url = `${scriptUrl}?action=getBulkData`;
+        console.log("Fetching bulk data from:", url);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const json = await response.json();
+        return json; // Should be array of objects
     } catch (error) {
-        console.error("Error fetching CSV:", error);
+        console.error("Error fetching bulk data:", error);
         throw error;
     }
 };
+
+// ... (fetchBulkData)
+
+export const fetchUsersFromScript = async () => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) return []; // If no script, can't get users.
+
+    try {
+        const url = `${scriptUrl}?action=getUsers`;
+        console.log("Fetching users from:", url);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const json = await response.json();
+        if (Array.isArray(json)) {
+            return json;
+        } else {
+            console.error("fetchUsersFromScript: Expected array but got", json);
+            const typeVar = typeof json;
+            const preview = JSON.stringify(json).substring(0, 50);
+            throw new Error(`Respuesta inválida del servidor (No es array). Tipo: ${typeVar}. Contenido: ${preview}...`);
+        }
+    } catch (error) {
+        console.error("Error fetching users:", error);
+        throw error; // Rethrow to handle in Context
+    }
+};
+
+// Deprecated: fetchSheetCsv (Removing or keeping as fallback? Removing per plan)
 export const deleteFromSheet = async (batchId, grade) => {
     const scriptUrl = await getActiveScriptUrl();
     if (!scriptUrl) return;
@@ -131,5 +156,53 @@ export const deleteFromSheet = async (batchId, grade) => {
     } catch (error) {
         console.error("Error deleting from sheet:", error);
         // Don't throw, just log
+    }
+};
+
+export const updateUserPin = async (name, newPin) => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) throw new Error("Script URL not configured");
+
+    try {
+        const payload = {
+            action: 'changePin',
+            name: name,
+            newPin: newPin
+        };
+
+        const response = await fetch(scriptUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        
+        const text = await response.text();
+        return text === "Success";
+    } catch (error) {
+        console.error("Error updating PIN:", error);
+        throw error;
+    }
+};
+
+export const updateSheetRow = async (data) => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) return;
+
+    try {
+        const payload = {
+            action: 'update',
+            ...data // Should contain Batch, and fields to update (SAE, HeatNo, etc.)
+        };
+
+        const response = await fetch(scriptUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        
+        const text = await response.text();
+        console.log("Update sheet response:", text);
+        return text;
+    } catch (error) {
+        console.error("Error updating sheet:", error);
+        throw error;
     }
 };

@@ -1,42 +1,62 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Platform, StatusBar } from 'react-native';
+import React, { useContext } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView, Platform, StatusBar, Linking } from 'react-native';
+import { AuthContext } from '../context/AuthContext';
 
 export default function HomeScreen({ navigation }) {
+    const { user } = useContext(AuthContext);
+    const role = user?.role?.toLowerCase() || 'auxiliar';
+    
+    // Permissions
+    const canBulk = role !== 'auxiliar';
+    const canViewDB = role !== 'auxiliar';
+    
+    const openDB = () => {
+        Linking.openURL('https://docs.google.com/spreadsheets/d/1wWQOdv-RXnOSwBWfwVBvdu9Rf2cE5aRjNAc8cPTDp8o/edit?usp=sharing');
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Lector QR</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Settings', { isInitial: false })}>
-                    <Text style={styles.settingsLink}>⚙️</Text>
+                <View>
+                    <Text style={styles.welcome}>Bienvenido,</Text>
+                    <Text style={styles.username}>{user ? user.name : 'Usuario'}</Text>
+                    <Text style={styles.roleTag}>{role.toUpperCase()}</Text>
+                </View>
+                <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+                    <Text style={styles.settingsIcon}>⚙️</Text>
                 </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.menu}>
-                <MenuButton 
-                    title="Escanear QR" 
-                    icon="📸" 
-                    onPress={() => navigation.navigate('Scanner')} 
-                    color="#2196F3"
-                />
-                <MenuButton 
-                    title="Ingreso Manual" 
-                    icon="📝" 
-                    onPress={() => navigation.navigate('Manual')} 
-                    color="#4CAF50"
-                />
-                <MenuButton 
-                    title="Generación Masiva" 
-                    icon="📑" 
-                    onPress={() => navigation.navigate('Bulk')} 
-                    color="#9C27B0"
-                />
-                <MenuButton 
-                    title="Historial" 
-                    icon="clock" 
-                    onPress={() => navigation.navigate('History')} 
-                    color="#FF9800"
-                />
-            </ScrollView>
+            <View style={styles.grid}>
+                <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Scanner')}>
+                    <Text style={styles.cardIcon}>📷</Text>
+                    <Text style={styles.cardTitle}>Escanear QR</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Manual')}>
+                    <Text style={styles.cardIcon}>📝</Text>
+                    <Text style={styles.cardTitle}>Ingreso Manual</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('History')}>
+                    <Text style={styles.cardIcon}>📋</Text>
+                    <Text style={styles.cardTitle}>Historial / Editar</Text>
+                </TouchableOpacity>
+
+                {canBulk && (
+                    <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Bulk')}>
+                        <Text style={styles.cardIcon}>📑</Text>
+                        <Text style={styles.cardTitle}>Generación Masiva</Text>
+                    </TouchableOpacity>
+                )}
+
+                {canViewDB && (
+                     <TouchableOpacity style={[styles.card, styles.dbCard]} onPress={openDB}>
+                        <Text style={styles.cardIcon}>☁️</Text>
+                        <Text style={styles.cardTitle}>Base de Datos (Web)</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
         </SafeAreaView>
     );
 }
@@ -69,21 +89,42 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#333',
     },
-    settingsLink: {
+    roleTag: {
+        fontSize: 10,
+        color: '#666',
+        fontWeight: 'bold',
+        marginTop: 2
+    },
+    settingsIcon: {
         fontSize: 24,
     },
     menu: {
         padding: 20,
     },
-    card: {
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 20,
-        marginBottom: 16,
+    grid: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        padding: 20, // Added padding to grid for consistency
+    },
+    card: {
+        width: '48%',
+        backgroundColor: 'white',
+        padding: 20,
+        borderRadius: 15,
         alignItems: 'center',
+        marginBottom: 15,
         elevation: 2,
-        borderLeftWidth: 5,
+        // The original card had borderLeftWidth: 5, which is not in the new definition.
+        // Assuming the user wants to keep it or it was an oversight in the instruction.
+        // For now, I'll keep it as it was in the original card style.
+        // If the intention was to remove it, the instruction should be more explicit.
+        // Based on the instruction's malformed part, it seems borderLeftWidth: 5 was intended to be kept.
+        borderLeftWidth: 5, 
+        borderLeftColor: '#ddd', // Added a default border color for the left border
+    },
+    dbCard: {
+        backgroundColor: '#E3F2FD'
     },
     iconContainer: {
         width: 50,
