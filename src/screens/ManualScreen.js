@@ -11,6 +11,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
 } from "react-native";
+import { useFocusEffect } from '@react-navigation/native';
 // import DateTimePicker from '@react-native-community/datetimepicker'; // Skipping for simplicity, using TextInput/Date logic or default today
 import {
   saveScanToHistory,
@@ -25,7 +26,7 @@ import { AuthContext } from "../context/AuthContext";
 
 export default function ManualScreen({ navigation, route }) {
   const { user } = useContext(AuthContext); 
-  const { updateSheetRow } = require('../utils/api');
+  const { updateSheetRow, fetchGlobalConfig, saveGlobalConfig } = require('../utils/api');
 
   // Edit Mode Params
   const { isEditing, item } = route.params || {};
@@ -40,7 +41,9 @@ export default function ManualScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [prefetchedSeq, setPrefetchedSeq] = useState(null);
   const [isFetchingSeq, setIsFetchingSeq] = useState(false);
+  const [lastBatchId, setLastBatchId] = useState(null);
   const [saeMap, setSaeMap] = useState({});
+  const [globalSaeMap, setGlobalSaeMap] = useState({}); // New: Store global config map
 
   useEffect(() => {
     if (!isEditing) {
@@ -65,14 +68,101 @@ export default function ManualScreen({ navigation, route }) {
     }
   }, [grade, saeMap, dateStr]);
 
+  /* --- Global SAE Logic --- */
+  const fetchConfig = async () => {
+    // Only fetch if not editing an existing item (we want to preserve its historical data)
+    if (isEditing) return;
+    
+    // Fetch global config
+    const configMap = await fetchGlobalConfig();
+    if (configMap) {
+        setGlobalSaeMap(configMap);
+        // If we have a global SAE for current grade, set it?
+        // Or wait for effect?
+        // Let's set it if current grade has one.
+        if (configMap[grade]) {
+            setSae(configMap[grade]);
+        }
+    }
+  };
+
+  const handleSetGlobal = async () => {
+      if (!sae) {
+          Alert.alert("Error", "Ingresa un valor en SAE primero");
+          return;
+      }
+      setLoading(true); 
+      const success = await saveGlobalConfig(sae, grade); // Pass grade
+      setLoading(false);
+      
+      if (success) {
+          // 1. Update Global Map State immediately
+          const newGlobalMap = { ...globalSaeMap, [grade]: sae };
+          setGlobalSaeMap(newGlobalMap);
+          
+          // 2. Update Local History Map State immediately (to stay in sync)
+          const newSaeMap = { ...saeMap, [grade]: sae };
+          setSaeMap(newSaeMap);
+          // Persist local history too, so it survives reload even if fetchConfig fails
+          saveManualData({ SAE_MAP: newSaeMap }).catch(e => console.log(e));
+
+          Alert.alert("Éxito", `SAE Global para Grado ${grade} actualizado`);
+      } else {
+          Alert.alert("Error", "No se pudo actualizar el SAE Global en el servidor");
+      }
+  };
+
+  useEffect(() => {
+    if (!isEditing) {
+        loadPersistedData();
+        fetchConfig(); // Fetch global SAE
+        prefetchSequence();
+    }
+  }, []); // Run once on mount
+
+  // ... (keeping other effects but removing duplications if any)
+
+  useEffect(() => {
+    // Determine if we should clear prefetched seq when parameters change
+    // Logic: if grade/date changes, prefetch again.
+    if(!isEditing) {
+        // Global SAE logic: If we have a global SAE for this grade, use it.
+        // User requested Global SAE updates "everyone".
+        // If globalSaeMap has entry for this grade, prefer it over previous local input unless typed?
+        // Simplicity: When switching grade, reset to global default if exists.
+        
+        if (globalSaeMap[grade]) {
+             setSae(globalSaeMap[grade]);
+        } else if (saeMap[grade]) {
+             // Fallback to local history if no global
+             setSae(saeMap[grade]);
+        } else {
+             setSae(""); // Clear if neither
+        }
+        
+        prefetchSequence();
+    }
+  }, [grade, dateStr, globalSaeMap]); // Added globalSaeMap dependency
+
   const prefetchSequence = async () => {
+      setLastBatchId(null); // Clear previous immediately to avoid confusion/lag perception
       setPrefetchedSeq(null); 
       setIsFetchingSeq(true);
       try {
            const [yIn, mIn, dIn] = dateStr.split('-').map(Number);
            const dateObj = new Date(yIn, mIn - 1, dIn);
            const seqData = await getNextBatchSequence(grade, dateObj);
+           // console.log("DEBUG: prefetchSequence seqData:", seqData); 
            setPrefetchedSeq(seqData);
+           
+           if (seqData && typeof seqData.lastSeq !== 'undefined' && seqData.lastSeq !== null && seqData.lastSeq > 0) {
+              const prefix = seqData.dateStr;
+              const s = seqData.lastSeq.toString().padStart(3, "0");
+              const fullId = `${prefix}I${s}`;
+              setLastBatchId(fullId);
+           } else {
+              setLastBatchId(null);
+           }
       } catch (e) {
           console.log("Prefetch Failed:", e);
       } finally {
@@ -149,7 +239,18 @@ export default function ManualScreen({ navigation, route }) {
 
       let prefix = seqData && seqData.dateStr ? seqData.dateStr : localDateStr;
 
-      // Check for overflow
+      // Handle Date Rollover (if server advanced the date)
+      let finalDateToSave = dateStr;
+      if (prefix !== localDateStr) {
+           // Parse YYMMDD to YYYY-MM-DD
+           const yy = prefix.substring(0, 2);
+           const mm = prefix.substring(2, 4);
+           const dd = prefix.substring(4, 6);
+           finalDateToSave = `20${yy}-${mm}-${dd}`;
+           Alert.alert("Aviso", `Secuencia llena. Se cambió la fecha a ${finalDateToSave}.`);
+      }
+
+      // Check for overflow (sanity check)
       if (seqToUse > 999) { Alert.alert("Error", "Secuencia > 999"); setLoading(false); return; }
 
       const s = seqToUse.toString().padStart(3, "0");
@@ -157,13 +258,21 @@ export default function ManualScreen({ navigation, route }) {
 
       // 2. Prepare Data
       const dataToSave = {
-        SAE: sae, Grade: grade, HeatNo: heat, Batch: batchId, BundleNo: bundle, Weight: weight, Date: dateStr,
+        SAE: sae, Grade: grade, HeatNo: heat, Batch: batchId, BundleNo: bundle, Weight: weight, Date: finalDateToSave,
         Operator: user ? user.name : "Unknown",
       };
 
       // 3. Save
+      // 3. Save
       await saveScanToHistory(dataToSave);
-      sendDataToSheet(dataToSave).catch((e) => console.error("Sheet Sync Error:", e));
+      
+      // Await sheet sync to ensure server has the data before we potentially ask for the next sequence
+      try {
+          await sendDataToSheet(dataToSave);
+      } catch (e) {
+          console.error("Sheet Sync Error:", e);
+          Alert.alert("Advertencia", "Se guardó localmente pero falló el envío a la hoja de cálculo.");
+      }
 
       const newSaeMap = { ...saeMap, [grade]: sae };
       setSaeMap(newSaeMap); 
@@ -173,6 +282,9 @@ export default function ManualScreen({ navigation, route }) {
       Alert.alert("Éxito", `Datos guardados. Lote: ${batchId}`);
       
       setHeat(""); setBundle(""); setWeight("");
+      
+      // Force fresh sequence fetch next time
+      setPrefetchedSeq(null);
       prefetchSequence();
 
     } catch (error) {
@@ -187,6 +299,44 @@ export default function ManualScreen({ navigation, route }) {
   const heatRef = React.useRef(null);
   const bundleRef = React.useRef(null);
   const weightRef = React.useRef(null);
+
+
+  const hasPrivilege = user && ['administrador', 'supervisor', 'verificador'].includes(user.role);
+
+  // Consolidated Effect for Grade Change & Auto-fill
+  // Refresh sequence when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if(!isEditing) {
+          prefetchSequence();
+      }
+    }, [grade, dateStr, isEditing]) // Dependencies trigger re-run if changed too, but mainly focus
+  );
+
+  useEffect(() => {
+    if(!isEditing) {
+        // Priority 1: Global SAE for this Grade
+        if (globalSaeMap[grade]) {
+             setSae(globalSaeMap[grade]);
+        } 
+        // Priority 2: Local History Map (if no global)
+        else if (saeMap[grade]) {
+             setSae(saeMap[grade]);
+        } 
+        // Default: Empty
+        else {
+             setSae(""); 
+        }
+        
+        prefetchSequence();
+    }
+  }, [grade, globalSaeMap, saeMap]); // Ensure Date doesn't trigger unrelated SAE changes, but prefetch needs it. Removed dateStr from this dependency to separate concerns? No, prefetch needs it.
+
+  // Separate Pre-fetch trigger to avoid overriding SAE on just date change?
+  // Actually, if date changes, SAE shouldn't change, but Sequence should.
+  // The above effect resets SAE on date change if I included dateStr?
+  // Wait, I included dateStr in the dependency array in the previous file content. 
+  // If date changes, `globalSaeMap[grade]` is still same, so it re-sets SAE to same value. Safe.
 
   return (
     <View style={styles.container}>
@@ -205,6 +355,13 @@ export default function ManualScreen({ navigation, route }) {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.form}>
+          {/* Last Batch Display */}
+          {lastBatchId ? (
+              <View style={styles.infoBox}>
+                  <Text style={styles.infoText}>Último Lote: {lastBatchId}</Text>
+              </View>
+          ) : null}
+
           {/* Date */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Fecha (YYYY-MM-DD)</Text>
@@ -215,29 +372,47 @@ export default function ManualScreen({ navigation, route }) {
               placeholder="YYYY-MM-DD"
               placeholderTextColor="#888"
               returnKeyType="next"
-              onSubmitEditing={() => saeRef.current?.focus()}
+              onSubmitEditing={() => hasPrivilege ? saeRef.current?.focus() : heatRef.current?.focus()}
               blurOnSubmit={false}
             />
           </View>
 
-          {/* SAE */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>SAE</Text>
-            <TextInput
-              ref={saeRef}
-              style={styles.input}
-              value={sae}
-              onChangeText={setSae}
-              placeholder="Ej. SAE1006"
-              placeholderTextColor="#888"
-              returnKeyType="next"
-              onSubmitEditing={() => heatRef.current?.focus()}
-              blurOnSubmit={false}
-            />
-          </View>
+          {/* SAE - Visible only for Privileged, but state exists for all */}
+          {hasPrivilege ? (
+            <View style={styles.inputGroup}>
+                <Text style={styles.label}>SAE</Text>
+                <TextInput
+                ref={saeRef}
+                style={styles.input}
+                value={sae}
+                onChangeText={setSae}
+                placeholder="Ej. SAE1006"
+                placeholderTextColor="#888"
+                returnKeyType="next"
+                onSubmitEditing={() => heatRef.current?.focus()}
+                blurOnSubmit={false}
+                />
+                <TouchableOpacity onPress={handleSetGlobal} style={{marginTop: 5, padding: 5, alignSelf: 'flex-start'}}>
+                    <Text style={{color: '#2196F3', fontSize: 13, fontWeight: 'bold'}}>
+                        ★ FIJAR COMO GLOBAL
+                    </Text>
+                </TouchableOpacity>
+            </View>
+          ) : (
+            // Hidden for normal users, maybe show a small label?
+            // "Eliminales ese campo" -> Remove input.
+            // Let's show a Read-Only Text so they know it's being applied.
+             <View style={styles.inputGroup}>
+                <Text style={styles.label}>SAE (Automático)</Text>
+                <Text style={{fontSize: 16, color: '#555', padding: 12, backgroundColor: '#f0f0f0', borderRadius: 8}}>
+                    {sae || "No definido"}
+                </Text>
+            </View>
+          )}
 
           {/* Grado */}
           <View style={styles.inputGroup}>
+
             <Text style={styles.label}>Grado (Grade)</Text>
             <View style={styles.gradeContainer}>
               {[
@@ -418,5 +593,19 @@ const styles = StyleSheet.create({
   },
   editButton: {
     backgroundColor: '#FF9800'
+  },
+  infoBox: {
+    backgroundColor: '#e3f2fd',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderLeftWidth: 5,
+    borderLeftColor: '#2196F3',
+    alignItems: 'center',
+  },
+  infoText: {
+    color: '#0d47a1',
+    fontWeight: 'bold',
+    fontSize: 16,
   }
 });

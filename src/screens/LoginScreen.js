@@ -1,5 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 import { getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage';
 import { Picker } from '@react-native-picker/picker';
@@ -57,7 +58,7 @@ export default function LoginScreen({ navigation }) {
             <View style={styles.content}>
                 <View style={styles.logoContainer}>
                     <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
-                    <Text style={styles.appName}>Control de Inventario</Text>
+                    <Text style={styles.appName}>Ingreso de MP</Text>
                     <Text style={styles.version}>v1.0.3</Text>
                 </View>
 

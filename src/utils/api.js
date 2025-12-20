@@ -23,7 +23,7 @@ export const getNextBatchSequence = async (grade, dateObj = null) => {
     // YYMMDD for Query Param (Legacy script likely uses this key)
     const queryDate = `${yStr}${mStr}${dStr}`;
 
-    let url = `${scriptUrl}?grade=${grade}&date=${queryDate}`;
+    let url = `${scriptUrl}?grade=${grade}&date=${queryDate}&_t=${Date.now()}`;
     
     console.log("Fetching sequence from:", url);
 
@@ -35,21 +35,32 @@ export const getNextBatchSequence = async (grade, dateObj = null) => {
         }
         
         const text = await response.text();
-        console.log("Raw response:", text);
         
         try {
             const data = JSON.parse(text);
             // The script returns { "result": "success", "maxSeq": N }
             // We need to return { seq: N+1, dateStr: ... }
             let seq = 1;
+            let lastSeq = null;
             if (data && typeof data.maxSeq !== 'undefined') {
-                seq = parseInt(data.maxSeq) + 1;
+                const max = parseInt(data.maxSeq);
+                if (!isNaN(max)) {
+                    lastSeq = max; // Capture maxSeq as lastSeq
+                    seq = max + 1;
+                }
             }
-            if (seq > 999) seq = 1; // Rollover logic
+            if (seq > 999) seq = 1; 
             
+            // Check for effectiveDate from server (Date Rollover)
+            let finalDateStr = dateStr;
+            if (data && data.effectiveDate) {
+                finalDateStr = data.effectiveDate;
+            }
+
             return {
                 seq: seq,
-                dateStr: dateStr
+                lastSeq: lastSeq,
+                dateStr: finalDateStr
             };
         } catch (e) {
             console.error("JSON Parse Error:", e);
@@ -204,5 +215,46 @@ export const updateSheetRow = async (data) => {
     } catch (error) {
         console.error("Error updating sheet:", error);
         throw error;
+    }
+};
+
+export const fetchGlobalConfig = async () => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) return null;
+
+    try {
+        const url = `${scriptUrl}?action=getConfig`;
+        // console.log("Fetching config from:", url);
+        const response = await fetch(url);
+        // It should return { "7.00": "SAE1006", "5.50": "SAE...", ... }
+        const json = await response.json();
+        return json;
+    } catch (error) {
+        console.error("Error fetching config:", error);
+        return null; // Fail gracefully
+    }
+};
+
+export const saveGlobalConfig = async (saeValue, grade) => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) return false;
+
+    try {
+        const payload = {
+            action: 'setConfig',
+            sae: saeValue,
+            grade: grade // Send the grade to save specific SAE
+        };
+
+        const response = await fetch(scriptUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        
+        const text = await response.text();
+        return text === "Success";
+    } catch (error) {
+        console.error("Error saving config:", error);
+        return false;
     }
 };

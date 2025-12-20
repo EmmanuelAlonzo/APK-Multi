@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { saveScriptUrl, getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage';
 
 export default function SettingsScreen({ navigation, route }) {
@@ -84,7 +85,7 @@ export default function SettingsScreen({ navigation, route }) {
                 <View style={styles.infoBox}>
                     <Text style={styles.label}>Estado de Conexión:</Text>
                     <Text style={styles.description}>
-                        Conectado a Google Apps Script (V8 - Roles)
+                        Conectado a Google Apps Script (V9 - Global SAE)
                     </Text>
                     <Text style={[styles.description, {fontSize: 10}]}>{url}</Text>
                 </View>

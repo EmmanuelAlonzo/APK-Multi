@@ -256,7 +256,7 @@ const generateHtml = (rows) => {
             <div class="header-sku">${row.Sku}</div>
             
             <div class="title">
-                ALAMBRON ${row.Grade} MM ${row.SAE}
+                ALAMBRON ${parseFloat(row.Grade).toFixed(2)} MM ${row.SAE}
             </div>
             
             <div class="grid">

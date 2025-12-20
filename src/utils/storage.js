@@ -1,11 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const SCRIPT_URL_KEY = 'script_url_v9'; // Bump to invalidate cache
+export const SCRIPT_URL_KEY = 'script_url_v10'; // Bump to invalidate cache
 export const HISTORY_KEY = "scan_history";
 export const MANUAL_DATA_KEY = 'manual_data_v2'; 
 
-// URL por defecto (V8 - Roles - New Deployment)
-export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzjXq24USuI5HO1RqTmfBWRn945KlryGGKFoZEhZ2-1FH0PryNVfFkgxvK7SiNWbi228w/exec';
+// URL por defecto (V9 - Global SAE)
+export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxy4Fh2tzMcvzKCT4ylPsLsMp8Injgm55Y3B-7I3oNSFm8-t6XZDPuiLFAI3fEiUM-A/exec';
 
 export const saveScriptUrl = async (url) => {
   try {
