@@ -132,7 +132,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#E5E5E5', // Concrete Grey
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     content: {
@@ -146,23 +146,26 @@ const styles = StyleSheet.create({
     },
     logo: {
         width: 100,
-        height: 100, // Assuming square icon
+        height: 100, 
         marginBottom: 10,
     },
     appName: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#D32F2F', // Corporate Red for Title
+        letterSpacing: 1,
     },
     version: {
-        color: '#888',
+        color: '#666',
         fontSize: 12,
     },
     formContainer: {
-        backgroundColor: '#f9f9f9',
+        backgroundColor: '#FFFFFF', // White form on Grey BG
         padding: 20,
-        borderRadius: 15,
-        elevation: 2,
+        borderRadius: 8,
+        elevation: 4,
+        borderTopWidth: 5,
+        borderTopColor: '#D32F2F' // Red accent top
     },
     loadingContainer: {
         alignItems: 'center',
@@ -170,25 +173,25 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         marginTop: 10,
-        color: '#666',
+        color: '#333',
     },
     label: {
         fontSize: 16,
         fontWeight: 'bold',
         marginBottom: 8,
-        color: '#333',
+        color: '#111', // Black Text
     },
     pickerContainer: {
         borderWidth: 1,
-        borderColor: '#ddd',
+        borderColor: '#ccc',
         borderRadius: 8,
         marginBottom: 20,
-        backgroundColor: 'white',
+        backgroundColor: '#F9F9F9',
     },
     input: {
-        backgroundColor: 'white',
+        backgroundColor: '#F9F9F9',
         borderWidth: 1,
-        borderColor: '#ddd',
+        borderColor: '#ccc',
         borderRadius: 8,
         padding: 12,
         fontSize: 18,
@@ -198,27 +201,31 @@ const styles = StyleSheet.create({
         color: '#000',
     },
     loginButton: {
-        backgroundColor: '#2196F3',
+        backgroundColor: '#111', // Black Button
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#D32F2F' // Red Border
     },
     loginButtonText: {
         color: 'white',
         fontSize: 18,
         fontWeight: 'bold',
+        letterSpacing: 1
     },
     errorText: {
-        color: 'red',
+        color: '#D32F2F',
         textAlign: 'center',
         marginBottom: 10,
+        fontWeight: 'bold'
     },
     retryButton: {
         padding: 10,
         alignItems: 'center',
     },
     retryText: {
-        color: '#2196F3',
+        color: '#D32F2F',
         fontWeight: 'bold',
     },
     refreshLink: {
@@ -226,7 +233,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     refreshText: {
-        color: '#888',
+        color: '#666',
         fontSize: 12,
     },
     configLink: {
@@ -234,7 +241,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     configText: {
-        color: '#888',
+        color: '#666',
         textDecorationLine: 'underline',
     },
     footer: {
@@ -242,7 +249,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     footerLink: {
-        color: '#aaa',
+        color: '#888',
         fontSize: 12,
     }
 });

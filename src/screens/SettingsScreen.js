@@ -133,7 +133,7 @@ export default function SettingsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#E5E5E5',
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     content: {
@@ -144,34 +144,37 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 20,
         textAlign: 'center',
+        color: '#D32F2F' // Red Title
     },
     label: {
         fontSize: 16,
         fontWeight: 'bold',
         marginBottom: 8,
+        color: '#111'
     },
     description: {
         fontSize: 14,
-        color: '#666',
+        color: '#444',
         marginBottom: 12,
     },
     input: {
         backgroundColor: 'white',
         borderWidth: 1,
-        borderColor: '#ddd',
+        borderColor: '#ccc',
         borderRadius: 8,
         padding: 12,
         marginBottom: 20,
-        minHeight: 80,
-        textAlignVertical: 'top',
+        minHeight: 50,
         color: '#000',
     },
     button: {
-        backgroundColor: '#2196F3',
+        backgroundColor: '#111', // Black
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
         marginBottom: 10,
+        borderWidth: 1,
+        borderColor: '#D32F2F', // Red Border
     },
     buttonText: {
         color: 'white',
@@ -180,6 +183,7 @@ const styles = StyleSheet.create({
     },
     cancelButton: {
         backgroundColor: 'transparent',
+        borderWidth: 0,
     },
     cancelButtonText: {
         color: '#666',
@@ -190,20 +194,30 @@ const styles = StyleSheet.create({
     },
     divider: {
         height: 1,
-        backgroundColor: '#ddd',
+        backgroundColor: '#ccc',
         marginBottom: 20,
     },
     pinButton: {
-        backgroundColor: '#FF9800', 
+        backgroundColor: '#D32F2F', // Red Solid
+        borderWidth: 0
     },
     logoutButton: {
-        backgroundColor: '#f44336', // Red
-        marginTop: 10,
+        backgroundColor: '#FFF', 
+        borderColor: '#D32F2F',
+        borderWidth: 1
     },
+    // Logout text override logic needed? No, buttonText is white. 
+    // Wait, if I make logoutButton White, buttonText needs to be Red.
+    // Let's keep logoutButton standard Black/Red border or maybe pure Red?
+    // User likes Red/Black. Let's make logout Red.
+    
     infoBox: {
-        backgroundColor: '#e3f2fd',
-        padding: 10,
+        backgroundColor: '#FFF',
+        padding: 15,
         borderRadius: 8,
-        marginBottom: 20
+        marginBottom: 20,
+        borderLeftWidth: 4,
+        borderLeftColor: '#D32F2F',
+        elevation: 2
     }
 });

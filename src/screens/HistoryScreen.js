@@ -161,44 +161,50 @@ export default function HistoryScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#E5E5E5', // Grey
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     header: {
         padding: 20,
-        backgroundColor: 'white',
+        backgroundColor: '#111', // Black
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        elevation: 2,
+        elevation: 4,
+        borderBottomWidth: 2,
+        borderBottomColor: '#D32F2F',
     },
     backButton: {
         padding: 5,
     },
     backText: {
         fontSize: 16,
-        color: '#2196F3',
+        color: '#DDD', // Light
     },
     title: {
         fontSize: 20,
         fontWeight: 'bold',
+        color: '#FFF', // White Title
     },
     clearButton: {
         padding: 5,
     },
     clearText: {
-        color: 'red',
+        color: '#D32F2F', // Red Text
         fontSize: 16,
+        fontWeight: 'bold',
     },
     list: {
         padding: 15,
     },
     card: {
         backgroundColor: 'white',
-        borderRadius: 10,
+        borderRadius: 8,
         padding: 15,
         marginBottom: 10,
-        elevation: 1,
+        elevation: 2,
+        borderLeftWidth: 4,
+        borderLeftColor: '#333' // Dark Accent
     },
     cardHeader: {
         flexDirection: 'row',
@@ -209,14 +215,15 @@ const styles = StyleSheet.create({
         paddingBottom: 5,
     },
     date: {
-        color: '#888',
+        color: '#666',
         fontSize: 12,
+        fontWeight: 'bold'
     },
     deleteBtn: {
         paddingHorizontal: 8,
     },
     deleteText: {
-        color: 'red',
+        color: '#D32F2F',
         fontSize: 16,
     },
     editBtn: {
@@ -224,7 +231,7 @@ const styles = StyleSheet.create({
         marginRight: 5
     },
     editText: {
-        color: '#FF9800',
+        color: '#FBC02D', // Yellow for edit
         fontSize: 16,
     },
     cardContent: {
@@ -236,6 +243,7 @@ const styles = StyleSheet.create({
     },
     bold: {
         fontWeight: 'bold',
+        color: '#000'
     },
     emptyContainer: {
         flex: 1,

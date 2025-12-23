@@ -156,29 +156,47 @@ export default function GlobalHistoryScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: 'white', elevation: 2 },
-    backText: { color: '#2196F3', fontSize: 16 },
-    title: { fontSize: 18, fontWeight: 'bold' },
-    reloadText: { fontSize: 24, color: '#666' },
-    summary: { padding: 10, flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#e0e0e0' },
-    summaryText: { color: '#333' },
+    container: { flex: 1, backgroundColor: '#E5E5E5', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+    header: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: 15, 
+        backgroundColor: '#111', 
+        elevation: 4,
+        borderBottomWidth: 2,
+        borderBottomColor: '#D32F2F'
+    },
+    backText: { color: '#DDD', fontSize: 16 },
+    title: { fontSize: 18, fontWeight: 'bold', color: '#FFF' },
+    reloadButton: { padding: 5 },
+    reloadText: { fontSize: 24, color: '#FFF' },
+    summary: { padding: 10, flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#DDD', borderBottomWidth: 1, borderColor: '#BBB' },
+    summaryText: { color: '#333', fontWeight: 'bold' },
     list: { padding: 10 },
-    card: { backgroundColor: 'white', padding: 15, marginBottom: 10, borderRadius: 8, elevation: 1 },
+    card: { 
+        backgroundColor: 'white', 
+        padding: 15, 
+        marginBottom: 10, 
+        borderRadius: 8, 
+        elevation: 2,
+        borderLeftWidth: 4,
+        borderLeftColor: '#D32F2F' 
+    },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5, borderBottomWidth: 1, borderColor: '#eee', paddingBottom: 5 },
-    batchId: { fontWeight: 'bold', fontSize: 16 },
-    date: { color: '#666' },
+    batchId: { fontWeight: 'bold', fontSize: 16, color: '#000' },
+    date: { color: '#666', fontWeight: 'bold' },
     row: { flexDirection: 'row', marginBottom: 5 },
-    label: { fontWeight: 'bold', width: 60, color: '#555' },
-    value: { flex: 1, color: '#333' },
+    label: { fontWeight: 'bold', width: 60, color: '#444' },
+    value: { flex: 1, color: '#111' },
     actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 },
-    actionBtn: { paddingVertical: 5, paddingHorizontal: 15, borderRadius: 15 },
-    editBtn: { backgroundColor: '#FFeb3b' }, // Yellowish
-    deleteBtn: { backgroundColor: '#ffebee' }, // Reddish
-    actionText: { color: '#333', fontWeight: 'bold' },
-    footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: 'white', elevation: 5 },
-    navBtn: { padding: 10, backgroundColor: '#2196F3', borderRadius: 5 },
-    disabled: { backgroundColor: '#ccc' },
+    actionBtn: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 4, borderWidth: 1 },
+    editBtn: { backgroundColor: '#FFF', borderColor: '#FBC02D' }, // White with Yellow border
+    deleteBtn: { backgroundColor: '#FFF', borderColor: '#D32F2F' }, // White with Red border
+    actionText: { color: '#333', fontWeight: 'bold', fontSize: 12 }, // Or specific colors for text
+    footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#111', elevation: 5, borderTopWidth: 2, borderTopColor: '#D32F2F' },
+    navBtn: { padding: 10, backgroundColor: '#333', borderRadius: 4, borderWidth: 1, borderColor: '#555' },
+    disabled: { backgroundColor: '#222', opacity: 0.5 },
     navText: { color: 'white', fontWeight: 'bold' },
-    pageIndicator: { fontSize: 18, fontWeight: 'bold' }
+    pageIndicator: { fontSize: 18, fontWeight: 'bold', color: '#FFF' }
 });

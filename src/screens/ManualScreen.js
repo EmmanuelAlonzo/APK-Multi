@@ -557,46 +557,53 @@ export default function ManualScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#E5E5E5", // "Atenuar blanco" -> Concrete Grey
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
   header: {
     padding: 20,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#111", // Black Header
     flexDirection: "row",
     alignItems: "center",
+    elevation: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: '#D32F2F', // Red Line
   },
   backButton: {
     marginRight: 15,
   },
   backText: {
     fontSize: 16,
-    color: "#2196F3",
+    color: "#DDD", // Light grey back text
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
+    color: "white", // White Title
   },
   form: {
     padding: 20,
   },
   inputGroup: {
     marginBottom: 20,
+    backgroundColor: '#F5F5F5', // Soft container for input groups? Or just independent inputs? 
+    // Let's keep it simple, inputs on the grey bg might be hard if not contrasty.
+    // Let's make inputs white on grey bg.
   },
   label: {
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 8,
-    color: "#333",
+    color: "#333", // Dark Grey for readability
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#CCC", // Softer border
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: "#fafafa",
-    color: "#000", // Enforce black text
+    backgroundColor: "#FFFFFF", // White Input stands out on Grey BG
+    color: "#000",
   },
   gradeContainer: {
     flexDirection: "row",
@@ -607,10 +614,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: "#D0D0D0", // Slightly darker unselected
   },
   gradeSelected: {
-    backgroundColor: "#2196F3",
+    backgroundColor: "#D32F2F", // Brand Red Selected
   },
   gradeText: {
     color: "#333",
@@ -620,11 +627,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   saveButton: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#111", // Black Button
     padding: 15,
     borderRadius: 8,
     alignItems: "center",
     marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#D32F2F', // Red Border
   },
   disabled: {
     opacity: 0.7,
@@ -633,22 +642,24 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 18,
     fontWeight: "bold",
+    letterSpacing: 1
   },
   editButton: {
-    backgroundColor: '#FF9800'
+    backgroundColor: '#D32F2F', // Red Button for Edit/Update
+    borderWidth: 0
   },
   infoBox: {
-    backgroundColor: '#e3f2fd',
+    backgroundColor: '#FFF', // White box
     padding: 10,
     borderRadius: 8,
     marginBottom: 20,
     borderLeftWidth: 5,
-    borderLeftColor: '#2196F3',
+    borderLeftColor: '#D32F2F', // Red Accent
     alignItems: 'center',
+    elevation: 2
   },
   infoText: {
-    color: '#0d47a1',
-    fontWeight: 'bold',
-    fontSize: 16,
+    color: '#333',
+    fontWeight: 'bold'
   }
 });

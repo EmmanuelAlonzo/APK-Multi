@@ -415,50 +415,81 @@ const generateHtml = (rows) => {
 const styles = StyleSheet.create({
     container: { 
         flex: 1, 
-        backgroundColor: '#fff',
+        backgroundColor: '#E5E5E5', // Grey
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
-    header: { padding: 20, backgroundColor: '#f5f5f5', flexDirection: 'row', alignItems: 'center' },
+    header: { 
+        padding: 20, 
+        backgroundColor: '#111', // Black
+        flexDirection: 'row', 
+        alignItems: 'center',
+        elevation: 4,
+        borderBottomWidth: 2,
+        borderBottomColor: '#D32F2F',
+    },
     backButton: { marginRight: 15 },
-    backText: { fontSize: 16, color: '#2196F3' },
-    title: { fontSize: 20, fontWeight: 'bold' },
+    backText: { fontSize: 16, color: '#DDD' },
+    title: { fontSize: 20, fontWeight: 'bold', color: '#FFF' },
     content: { padding: 20 },
-    label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
-    input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 20, color: '#000', backgroundColor: '#fff' },
-    button: { backgroundColor: '#9C27B0', padding: 15, borderRadius: 8, alignItems: 'center' },
-    buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+    label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#111' },
+    input: { 
+        borderWidth: 1, 
+        borderColor: '#ccc', 
+        borderRadius: 8, 
+        padding: 12, 
+        marginBottom: 20, 
+        color: '#000', 
+        backgroundColor: '#fff' 
+    },
+    button: { 
+        backgroundColor: '#111', 
+        padding: 15, 
+        borderRadius: 8, 
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#D32F2F',
+        marginTop: 10
+    },
+    buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
     gradeContainer: { flexDirection: 'row', marginBottom: 20, height: 50 },
     gradeButton: { 
-        backgroundColor: '#eee', 
+        backgroundColor: '#D0D0D0', 
         paddingHorizontal: 15, 
         paddingVertical: 10, 
         borderRadius: 20, 
         marginRight: 10, 
-        borderWidth: 1, 
-        borderColor: '#ddd',
-        justifyContent: 'center'
     },
-    gradeButtonSelected: { backgroundColor: '#2196F3', borderColor: '#2196F3' },
+    gradeButtonSelected: { backgroundColor: '#D32F2F' },
     gradeButtonText: { fontSize: 16, color: '#333' },
     gradeButtonTextSelected: { color: 'white', fontWeight: 'bold' },
-    status: { textAlign: 'center', marginBottom: 10, color: '#666' },
+    status: { textAlign: 'center', marginBottom: 10, color: '#111' },
     disabled: { opacity: 0.7 },
     externalSection: {
         marginBottom: 20,
+        backgroundColor: '#FFF',
+        padding: 15,
+        borderRadius: 8,
+        elevation: 2
     },
     divider: {
         height: 1,
-        backgroundColor: '#ddd',
+        backgroundColor: '#CCC',
         marginVertical: 20,
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 10,
-        color: '#333',
+        color: '#D32F2F',
     },
     externalButton: {
-        backgroundColor: '#4CAF50', // Green distinct from main purple
-        marginTop: 10
+        backgroundColor: '#111', 
+        borderColor: '#FFF', // or keep red?
+        borderWidth: 0,
+        // Make green if specific? User said "Red/White/Black/Grey" primarily.
+        // Let's stick to theme or keep logic color.
+        // If imports from sheet, maybe a different shade?
+        // Let's use Dark Grey for secondary action
+        backgroundColor: '#333'
     }
 });
