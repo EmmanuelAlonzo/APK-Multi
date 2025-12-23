@@ -12,6 +12,7 @@ import ScannerScreen from './src/screens/ScannerScreen';
 import ManualScreen from './src/screens/ManualScreen';
 import BulkScreen from './src/screens/BulkScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
+import GlobalHistoryScreen from './src/screens/GlobalHistoryScreen'; // Nuevo
 import LoginScreen from './src/screens/LoginScreen';
 
 const Stack = createStackNavigator();
@@ -66,6 +67,7 @@ const AppContent = () => {
                         <Stack.Screen name="Manual" component={ManualScreen} />
                         <Stack.Screen name="Bulk" component={BulkScreen} />
                         <Stack.Screen name="History" component={HistoryScreen} />
+                        <Stack.Screen name="GlobalHistory" component={GlobalHistoryScreen} />
                     </>
                 )}
             </Stack.Navigator>

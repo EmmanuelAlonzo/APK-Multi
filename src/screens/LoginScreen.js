@@ -58,7 +58,7 @@ export default function LoginScreen({ navigation }) {
             <View style={styles.content}>
                 <View style={styles.logoContainer}>
                     <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
-                    <Text style={styles.appName}>Ingreso de MP</Text>
+                    <Text style={styles.appName}>Control de MP</Text>
                     <Text style={styles.version}>v1.0.3</Text>
                 </View>
 

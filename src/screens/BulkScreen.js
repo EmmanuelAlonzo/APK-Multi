@@ -3,25 +3,35 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ScrollView,
 import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
 import Papa from 'papaparse';
-import { fetchBulkData, getNextBatchSequence } from '../utils/api'; // Removed fetchSheetCsv
+import { fetchBulkData, getNextBatchSequence, fetchExternalBulkData } from '../utils/api';
 
 export default function BulkScreen({ navigation }) {
     
     const [filterGrade, setFilterGrade] = useState(''); // NEW: Filter by Grade
+    const [externalUrl, setExternalUrl] = useState(''); // NEW: External URL state
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState('');
 
-    const handleGenerate = async () => {
+    const handleGenerate = async (isExternal = false) => {
         // Validation of sheetUrl is no longer needed as we use the stored one.
         
         setLoading(true);
         setStatus('Consultando datos...');
 
         try {
-            // 1. Fetch Data directly from Script (JSON)
-            // This replaces fetching CSV and parsing it locally.
+            // 1. Fetch Data
+            let rawRows;
+            if (isExternal) {
+                if (!externalUrl) {
+                     throw new Error("Por favor ingresa una URL válida.");
+                }
+                rawRows = await fetchExternalBulkData(externalUrl);
+            } else {
+                 // Classic DB Fetch
+                 rawRows = await fetchBulkData();
+            }
             // The script now returns [ { Grade: "...", ... }, ... ]
-            const rawRows = await fetchBulkData();
+            // const rawRows = await fetchBulkData(); // OLD
             
             if (!rawRows || rawRows.length === 0) {
                  throw new Error("La hoja de datos está vacía.");
@@ -201,9 +211,9 @@ export default function BulkScreen({ navigation }) {
             </View>
 
             <View style={styles.content}>
-                {/* Removed URL Input */}
                 
-                <Text style={styles.label}>Filtrar por Grado/Medida (OPCIONAL):</Text>
+                {/* Global Grade Filter */}
+                <Text style={styles.label}>Filtrar por Grado/Medida:</Text>
                 <View style={styles.gradeContainer}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {['5.50', '6.00', '6.50', '7.00', '8.00', '9.00', '10.00', '11.00', '12.00'].map((g) => (
@@ -213,7 +223,7 @@ export default function BulkScreen({ navigation }) {
                                     styles.gradeButton,
                                     filterGrade === g && styles.gradeButtonSelected
                                 ]}
-                                onPress={() => setFilterGrade(filterGrade === g ? '' : g)} // Toggle
+                                onPress={() => setFilterGrade(filterGrade === g ? '' : g)}
                             >
                                 <Text style={[
                                     styles.gradeButtonText,
@@ -223,12 +233,34 @@ export default function BulkScreen({ navigation }) {
                         ))}
                     </ScrollView>
                 </View>
-                
-                <Text style={styles.status}>{status}</Text>
+
+                <View style={styles.divider} />
+
+                <View style={styles.externalSection}>
+                    <Text style={styles.sectionTitle}>Importar desde Sheet Externo</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Pegar enlace de Google Sheet aquí..."
+                        placeholderTextColor="#999"
+                        value={externalUrl}
+                        onChangeText={setExternalUrl}
+                    />
+                    <TouchableOpacity 
+                        style={[styles.button, styles.externalButton, loading && styles.disabled]} 
+                        onPress={() => handleGenerate(true)} 
+                        disabled={loading || !externalUrl}
+                    >
+                         <Text style={styles.buttonText}>{loading ? 'Procesando...' : 'Obtener etiquetas de hoja externa'}</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.divider} />
+
+                <Text style={styles.sectionTitle}>Generar desde Base de Datos Principal</Text>
                 
                 <TouchableOpacity 
                     style={[styles.button, loading && styles.disabled]} 
-                    onPress={handleGenerate}
+                    onPress={() => handleGenerate(false)}
                     disabled={loading}
                 >
                     <Text style={styles.buttonText}>{loading ? 'Procesando...' : 'Generar PDF'}</Text>
@@ -410,5 +442,23 @@ const styles = StyleSheet.create({
     gradeButtonText: { fontSize: 16, color: '#333' },
     gradeButtonTextSelected: { color: 'white', fontWeight: 'bold' },
     status: { textAlign: 'center', marginBottom: 10, color: '#666' },
-    disabled: { opacity: 0.7 }
+    disabled: { opacity: 0.7 },
+    externalSection: {
+        marginBottom: 20,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#ddd',
+        marginVertical: 20,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 10,
+        color: '#333',
+    },
+    externalButton: {
+        backgroundColor: '#4CAF50', // Green distinct from main purple
+        marginTop: 10
+    }
 });

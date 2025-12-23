@@ -44,6 +44,13 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.cardTitle}>Historial / Editar</Text>
                 </TouchableOpacity>
 
+                {['administrador', 'supervisor', 'verificador'].includes(role) && (
+                    <TouchableOpacity style={[styles.card, styles.adminItem]} onPress={() => navigation.navigate('GlobalHistory')}>
+                        <Text style={styles.cardIcon}>🌎</Text>
+                        <Text style={styles.cardTitle}>Gestión Global</Text>
+                    </TouchableOpacity>
+                )}
+
                 {canBulk && (
                     <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Bulk')}>
                         <Text style={styles.cardIcon}>📑</Text>
@@ -74,30 +81,44 @@ const MenuButton = ({ title, icon, onPress, color }) => (
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f0f2f5',
+        backgroundColor: '#E5E5E5', // "Atenuar blanco" -> Concrete Grey
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     header: {
         padding: 20,
-        backgroundColor: 'white',
+        backgroundColor: '#111', // "Utiliza el negro" -> Black Header
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        elevation: 2,
+        elevation: 4,
+        borderBottomWidth: 2,
+        borderBottomColor: '#D32F2F', // Red accent line
     },
     headerTitle: {
         fontSize: 22,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#FFF', // White text on Black
+    },
+    welcome: {
+        fontSize: 14,
+        color: '#BBB', // Light grey text
+    },
+    username: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#FFF',
     },
     roleTag: {
-        fontSize: 10,
-        color: '#666',
+        fontSize: 11,
+        color: '#D32F2F', // Red role tag
         fontWeight: 'bold',
-        marginTop: 2
+        marginTop: 2,
+        letterSpacing: 1,
     },
     settingsIcon: {
         fontSize: 24,
+        color: 'white', // White icon
+        opacity: 0.9,
     },
     menu: {
         padding: 20,
@@ -106,26 +127,39 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
-        padding: 20, // Added padding to grid for consistency
+        padding: 20, 
+    },
+    logoutButton: {
+        marginTop: 20,
+        backgroundColor: '#ffebee',
+        borderWidth: 0,
+    },
+    logoutText: {
+        color: '#d32f2f',
+    },
+    // Admin Items
+    adminItem: {
+        backgroundColor: '#F5F5F5',
+        borderLeftColor: '#000' // Black border for admin to distinguish? Or Red? Let's stick to Red theme.
     },
     card: {
         width: '48%',
-        backgroundColor: 'white',
+        backgroundColor: '#FFFFFF', // Clean White cards stand out on Grey BG
         padding: 20,
-        borderRadius: 15,
+        borderRadius: 8, // Sharper corners for "Industrial" look
         alignItems: 'center',
         marginBottom: 15,
-        elevation: 2,
-        // The original card had borderLeftWidth: 5, which is not in the new definition.
-        // Assuming the user wants to keep it or it was an oversight in the instruction.
-        // For now, I'll keep it as it was in the original card style.
-        // If the intention was to remove it, the instruction should be more explicit.
-        // Based on the instruction's malformed part, it seems borderLeftWidth: 5 was intended to be kept.
+        elevation: 3,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
         borderLeftWidth: 5, 
-        borderLeftColor: '#ddd', // Added a default border color for the left border
+        borderLeftColor: '#D32F2F', // Brand Red
     },
     dbCard: {
-        backgroundColor: '#E3F2FD'
+        backgroundColor: '#FFF',
+        borderLeftColor: '#333' // Dark Grey/Black for variety? Or Red? Keeping consistent.
     },
     iconContainer: {
         width: 50,
@@ -134,14 +168,22 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 15,
+        backgroundColor: '#D32F2F', 
     },
     icon: {
         fontSize: 24,
-        color: 'white',
+        color: 'white', 
+    },
+    cardIcon: {
+        fontSize: 32,
+        marginBottom: 10,
+        color: '#D32F2F' // Red Icon
     },
     cardTitle: {
-        fontSize: 18,
+        fontSize: 15,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#111', // Black Text
+        textAlign: 'center',
+        marginTop: 5
     }
 });

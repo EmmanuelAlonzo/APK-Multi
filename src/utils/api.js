@@ -35,6 +35,7 @@ export const getNextBatchSequence = async (grade, dateObj = null) => {
         }
         
         const text = await response.text();
+        console.log("Sequence API Response:", text); // DEBUG LOG
         
         try {
             const data = JSON.parse(text);
@@ -92,6 +93,96 @@ export const sendDataToSheet = async (data) => {
     }
 };
 
+export const fetchExternalBulkData = async (externalUrl) => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) throw new Error("Script URL not configured");
+
+    try {
+        // Encode the external URL properly
+        const url = `${scriptUrl}?action=getExternalBulkData&url=${encodeURIComponent(externalUrl)}`;
+        console.log("Fetching external bulk data from:", url); // Log URL for debugging
+        const response = await fetch(url);
+        
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const json = await response.json();
+        
+        // Handle error returned by GAS
+        if (json.error) {
+            throw new Error("Server Error: " + json.error);
+        }
+
+        return json;
+    } catch (error) {
+        console.error("Error fetching external bulk data:", error);
+        throw error;
+    }
+};
+
+export const fetchPaginatedData = async (page = 1, pageSize = 100) => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) throw new Error("Script URL not configured");
+
+    try {
+        const url = `${scriptUrl}?action=getPaginatedData&page=${page}&pageSize=${pageSize}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const json = await response.json();
+        if (json.error) throw new Error(json.error);
+        
+        // NORMALIZE DATA (Handle Spanish/English Keys & Fuzzy Matching)
+        if (json.data && Array.isArray(json.data)) {
+            json.data = json.data.map(item => {
+                // Helper to find value by regex key
+                const findVal = (regex) => {
+                    const key = Object.keys(item).find(k => regex.test(k));
+                    return key ? item[key] : undefined;
+                };
+
+                return {
+                    Batch: findVal(/(batch|lote)/i) || 'N/A',
+                    Grade: findVal(/(grade|grado)/i) || '',
+                    SAE: findVal(/(sae)/i) || '',
+                    HeatNo: findVal(/(heat|heatno|colada)/i) || '',
+                    // Bundle: Look for Bundle, Coil, Rollo, Bobina, Paquete (matched anywhere in key)
+                    BundleNo: findVal(/(bundle|bundleno|coil|rollo|paquete|bobina)/i) || '',
+                    Weight: findVal(/(weight|peso)/i) || 0,
+                    Date: findVal(/(date|fecha)/i) || '',
+                    ...item // Keep original keys
+                };
+            });
+        }
+        
+        return json;
+    } catch (e) {
+        console.error("Pagination Fetch Error:", e);
+        throw e;
+    }
+};
+
+export const updateRemoteRow = async (batchId, updateData) => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) throw new Error("Script URL not configured");
+
+    try {
+        const url = `${scriptUrl}?action=updateRow`;
+        const payload = { ...updateData, Batch: batchId };
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error('Network response was not ok');
+        const json = await response.json();
+        if (json.error) throw new Error(json.error);
+        return json;
+    } catch (e) {
+        console.error("Remote Update Error:", e);
+        throw e;
+    }
+};
+
 export const fetchBulkData = async () => {
     const scriptUrl = await getActiveScriptUrl();
     if (!scriptUrl) throw new Error("Script URL not configured");
@@ -111,6 +202,24 @@ export const fetchBulkData = async () => {
 };
 
 // ... (fetchBulkData)
+
+
+export const fetchLastBatch = async (grade) => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) return null;
+
+    try {
+        const url = `${scriptUrl}?action=getLastBatch&grade=${grade}&_t=${Date.now()}`;
+        console.log("Fetching absolute last batch from:", url); // Log URL
+        const response = await fetch(url);
+        const text = await response.text();
+        console.log("Last Batch Response (Raw):", text); // Log response
+        return text; 
+    } catch (error) {
+        console.error("Error fetching last batch:", error);
+        return null;
+    }
+};
 
 export const fetchUsersFromScript = async () => {
     const scriptUrl = await getActiveScriptUrl();

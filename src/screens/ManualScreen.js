@@ -20,7 +20,7 @@ import {
   getLocalSequence,
   saveLocalSequence,
 } from "../utils/storage";
-import { getNextBatchSequence, sendDataToSheet } from "../utils/api";
+import { getNextBatchSequence, sendDataToSheet, fetchLastBatch, updateRemoteRow } from "../utils/api";
 import { AuthContext } from "../context/AuthContext";
 // PDF Generation will be handled in a separate utility or here if simple
 
@@ -31,12 +31,26 @@ export default function ManualScreen({ navigation, route }) {
   // Edit Mode Params
   const { isEditing, item } = route.params || {};
 
-  const [sae, setSae] = useState(isEditing ? item.SAE : "");
-  const [grade, setGrade] = useState(isEditing ? item.Grade : "7.00");
-  const [heat, setHeat] = useState(isEditing ? item.HeatNo : "");
-  const [bundle, setBundle] = useState(isEditing ? item.BundleNo : "");
-  const [weight, setWeight] = useState(isEditing ? item.Weight : "");
-  const [dateStr, setDateStr] = useState(isEditing ? item.Date : new Date().toISOString().split("T")[0]);
+  const [sae, setSae] = useState(isEditing ? String(item.SAE || "") : "");
+  // Normalize grade to ensure it matches button values (e.g., "5.5" -> "5.50")
+  const formattedGrade = isEditing && item.Grade 
+        ? parseFloat(item.Grade).toFixed(2) 
+        : "7.00";
+  const [grade, setGrade] = useState(formattedGrade);
+  
+  const [heat, setHeat] = useState(isEditing ? String(item.HeatNo || "") : "");
+  const [bundle, setBundle] = useState(isEditing ? String(item.BundleNo || item.Coil || item.coil || "") : "");
+  const [weight, setWeight] = useState(isEditing ? String(item.Weight || "") : "");
+  // Fix: use local date instead of UTC to avoid date skipping in evening
+  const getLocalDate = () => {
+      const now = new Date();
+      const Y = now.getFullYear();
+      const M = (now.getMonth() + 1).toString().padStart(2, '0');
+      const D = now.getDate().toString().padStart(2, '0');
+      return `${Y}-${M}-${D}`;
+  };
+
+  const [dateStr, setDateStr] = useState(isEditing ? item.Date : getLocalDate());
   
   const [loading, setLoading] = useState(false);
   const [prefetchedSeq, setPrefetchedSeq] = useState(null);
@@ -46,6 +60,7 @@ export default function ManualScreen({ navigation, route }) {
   const [globalSaeMap, setGlobalSaeMap] = useState({}); // New: Store global config map
 
   useEffect(() => {
+    console.log("DEBUG: ManualScreen Mounted v2 - Checking fallback logic"); // Version check
     if (!isEditing) {
         loadPersistedData();
     }
@@ -145,24 +160,41 @@ export default function ManualScreen({ navigation, route }) {
   }, [grade, dateStr, globalSaeMap]); // Added globalSaeMap dependency
 
   const prefetchSequence = async () => {
-      setLastBatchId(null); // Clear previous immediately to avoid confusion/lag perception
+      setLastBatchId(null);
       setPrefetchedSeq(null); 
       setIsFetchingSeq(true);
       try {
            const [yIn, mIn, dIn] = dateStr.split('-').map(Number);
            const dateObj = new Date(yIn, mIn - 1, dIn);
-           const seqData = await getNextBatchSequence(grade, dateObj);
-           // console.log("DEBUG: prefetchSequence seqData:", seqData); 
+           
+           // Parallel Execution for Speed
+           const dailyPromise = getNextBatchSequence(grade, dateObj);
+           const absolutePromise = fetchLastBatch(grade);
+
+           // Wait for both (or handle failures gracefully)
+           // We use allSettled or just all. simple all is strict, but fetchLastBatch handles its own errors returning null.
+           const [seqData, absoluteLast] = await Promise.all([dailyPromise, absolutePromise]);
+
            setPrefetchedSeq(seqData);
            
+           let foundDaily = false;
            if (seqData && typeof seqData.lastSeq !== 'undefined' && seqData.lastSeq !== null && seqData.lastSeq > 0) {
               const prefix = seqData.dateStr;
               const s = seqData.lastSeq.toString().padStart(3, "0");
               const fullId = `${prefix}I${s}`;
               setLastBatchId(fullId);
-           } else {
-              setLastBatchId(null);
+              foundDaily = true;
            }
+
+           // Fallback if daily not found
+           if (!foundDaily) {
+                if (absoluteLast && absoluteLast.trim().length > 0 && absoluteLast !== "null") {
+                    setLastBatchId(absoluteLast);
+                } else {
+                    setLastBatchId(null);
+                }
+           }
+
       } catch (e) {
           console.log("Prefetch Failed:", e);
       } finally {
@@ -194,7 +226,14 @@ export default function ManualScreen({ navigation, route }) {
               // For simplicity, we update fields on the EXISTING Batch ID. Changing Batch ID is dangerous.
           };
 
-          // Update Sheet
+          if (route.params?.isRemote) {
+              await updateRemoteRow(batchId, updateData);
+              Alert.alert("Éxito", "Registro actualizado remotamente");
+              navigation.goBack();
+              return;
+          }
+
+          // Update Sheet (Local Edit)
           await updateSheetRow(updateData);
           
           // Update History (Local) requires modifying the item in storage
@@ -347,7 +386,7 @@ export default function ManualScreen({ navigation, route }) {
         >
           <Text style={styles.backText}>← Volver</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{isEditing ? `Editar ${item?.Batch}` : "Ingreso Manual"}</Text>
+        <Text style={styles.title}>{isEditing ? `Editar Lote: ${item?.Batch}` : "Ingreso Manual"}</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -355,12 +394,16 @@ export default function ManualScreen({ navigation, route }) {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.form}>
-          {/* Last Batch Display */}
-          {lastBatchId ? (
-              <View style={styles.infoBox}>
+          {/* Last Batch Display - Persistent */}
+          <View style={styles.infoBox}>
+              {isFetchingSeq ? (
+                  <Text style={styles.infoText}>Sincronizando secuencia...</Text>
+              ) : lastBatchId ? (
                   <Text style={styles.infoText}>Último Lote: {lastBatchId}</Text>
-              </View>
-          ) : null}
+              ) : (
+                  <Text style={[styles.infoText, { color: '#888' }]}>Último Lote: --</Text>
+              )}
+          </View>
 
           {/* Date */}
           <View style={styles.inputGroup}>
