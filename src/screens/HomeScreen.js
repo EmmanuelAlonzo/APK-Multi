@@ -3,16 +3,34 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, L
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 
+import * as WebBrowser from 'expo-web-browser';
+import { getPreferredBrowser } from '../utils/storage';
+
 export default function HomeScreen({ navigation }) {
     const { user } = useContext(AuthContext);
     const role = user?.role?.toLowerCase() || 'auxiliar';
     
-    // Permissions
+    // Permisos
     const canBulk = role !== 'auxiliar';
     const canViewDB = role !== 'auxiliar';
     
-    const openDB = () => {
-        Linking.openURL('https://docs.google.com/spreadsheets/d/1wWQOdv-RXnOSwBWfwVBvdu9Rf2cE5aRjNAc8cPTDp8o/edit?usp=sharing');
+    const openDB = async () => {
+        const url = 'https://docs.google.com/spreadsheets/d/1wWQOdv-RXnOSwBWfwVBvdu9Rf2cE5aRjNAc8cPTDp8o/edit?usp=sharing';
+        const pref = await getPreferredBrowser(); // Retorna null si no se ha elegido nada
+
+        // 1. Validación Estricta: Si no ha elegido navegador, BLOQUEAR y avisar.
+        if (!pref) {
+            alert("Acción Requerida: Por favor ve a Configuración (⚙️) y selecciona un navegador seguro (Chrome, Brave o Edge) para visualizar la base de datos.");
+            return;
+        }
+
+        // 2. Intentar abrir SOLO con el navegador seleccionado
+        try {
+            await WebBrowser.openBrowserAsync(url, { browserPackage: pref });
+        } catch (e) {
+            // 3. Si falla (ej. eligió Chrome pero no lo tiene instalado), avisar error.
+            alert("Error: No se pudo abrir el navegador seleccionado. Verifica que la aplicación esté instalada en tu dispositivo.");
+        }
     };
 
     return (
@@ -81,27 +99,27 @@ const MenuButton = ({ title, icon, onPress, color }) => (
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#E5E5E5', // "Atenuar blanco" -> Concrete Grey
+        backgroundColor: '#121212', // Dark Background
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     header: {
         padding: 20,
-        backgroundColor: '#111', // "Utiliza el negro" -> Black Header
+        backgroundColor: '#000', // Pure Black Header
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         elevation: 4,
         borderBottomWidth: 2,
-        borderBottomColor: '#D32F2F', // Red accent line
+        borderBottomColor: '#D32F2F', 
     },
     headerTitle: {
         fontSize: 22,
         fontWeight: 'bold',
-        color: '#FFF', // White text on Black
+        color: '#FFF', 
     },
     welcome: {
         fontSize: 14,
-        color: '#BBB', // Light grey text
+        color: '#BBB', 
     },
     username: {
         fontSize: 20,
@@ -110,14 +128,14 @@ const styles = StyleSheet.create({
     },
     roleTag: {
         fontSize: 11,
-        color: '#D32F2F', // Red role tag
+        color: '#D32F2F', 
         fontWeight: 'bold',
         marginTop: 2,
         letterSpacing: 1,
     },
     settingsIcon: {
         fontSize: 24,
-        color: 'white', // White icon
+        color: 'white',
         opacity: 0.9,
     },
     menu: {
@@ -131,22 +149,22 @@ const styles = StyleSheet.create({
     },
     logoutButton: {
         marginTop: 20,
-        backgroundColor: '#ffebee',
+        backgroundColor: '#2C2C2C', // Darkened
         borderWidth: 0,
     },
     logoutText: {
         color: '#d32f2f',
     },
-    // Admin Items
+    // Ítems de Admin
     adminItem: {
-        backgroundColor: '#F5F5F5',
-        borderLeftColor: '#000' // Black border for admin to distinguish? Or Red? Let's stick to Red theme.
+        backgroundColor: '#1A1A1A', // Slightly darker than cards
+        borderLeftColor: '#FFF' // White Accent for Admin
     },
     card: {
         width: '48%',
-        backgroundColor: '#FFFFFF', // Clean White cards stand out on Grey BG
+        backgroundColor: '#1E1E1E', // Dark Cards
         padding: 20,
-        borderRadius: 8, // Sharper corners for "Industrial" look
+        borderRadius: 8,
         alignItems: 'center',
         marginBottom: 15,
         elevation: 3,
@@ -155,11 +173,11 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 3,
         borderLeftWidth: 5, 
-        borderLeftColor: '#D32F2F', // Brand Red
+        borderLeftColor: '#D32F2F', 
     },
     dbCard: {
-        backgroundColor: '#FFF',
-        borderLeftColor: '#333' // Dark Grey/Black for variety? Or Red? Keeping consistent.
+        backgroundColor: '#1E1E1E',
+        borderLeftColor: '#555' 
     },
     iconContainer: {
         width: 50,
@@ -177,12 +195,12 @@ const styles = StyleSheet.create({
     cardIcon: {
         fontSize: 32,
         marginBottom: 10,
-        color: '#D32F2F' // Red Icon
+        color: '#D32F2F' 
     },
     cardTitle: {
         fontSize: 15,
         fontWeight: 'bold',
-        color: '#111', // Black Text
+        color: '#EEE', // Light Text
         textAlign: 'center',
         marginTop: 5
     }

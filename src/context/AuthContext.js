@@ -1,6 +1,6 @@
-import React, { createContext, useState, useEffect } from 'react'; // FIXED: Added React imports
+import React, { createContext, useState, useEffect } from 'react'; // CORREGIDO: Importaciones de React agregadas
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchUsersFromScript } from '../utils/api'; // Ensure this is imported if used, logically it was there before
+import { fetchUsersFromScript } from '../utils/api'; // Asegura que se importe si se usa
 
 export const AuthContext = createContext();
 
@@ -9,9 +9,9 @@ export const AuthProvider = ({ children }) => {
     const [userList, setUserList] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(false);
     const [initializing, setInitializing] = useState(true);
-    const [error, setError] = useState(null); // New error state
-
-    // ... (loadPersistedUser same)
+    const [error, setError] = useState(null); // Nuevo estado de error
+    
+    // ... (loadPersistedUser igual)
 
     const refreshUsers = async () => {
         setLoadingUsers(true);

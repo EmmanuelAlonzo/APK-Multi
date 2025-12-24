@@ -13,14 +13,14 @@ export default function LoginScreen({ navigation }) {
     const [verifying, setVerifying] = useState(false);
 
     useEffect(() => {
-        // Auto-refresh users on mount if empty
+        // Auto-actualizar usuarios al montar si está vacío
         if (userList.length === 0) {
             refreshUsers();
         }
     }, []);
 
     useEffect(() => {
-        // Set default selection if list populates
+        // Establecer selección por defecto si la lista se llena
         if (userList.length > 0 && !selectedUser) {
             setSelectedUser(userList[0]);
         }
@@ -37,17 +37,18 @@ export default function LoginScreen({ navigation }) {
         }
 
         setVerifying(true);
-        // Simulate small delay for UX? No need.
+        setVerifying(true);
+        // ¿Simular pequeño retraso para UX? No es necesario.
         const success = login(selectedUser, pin);
         setVerifying(false);
 
         if (success) {
-            // Navigation handled by App.js condition? 
-            // Or we can navigate manually if App.js structure allows.
-            // But integrating with Context usually means state change triggers re-render of Navigator.
-            // Let's assume App.js will handle it or we navigate to Home.
-            // If we use Stack Navigator with condition, it's automatic.
-            // IF NOT, we push. Let's assume condition strategy in App.js.
+            // ¿Navegación manejada por condición en App.js? 
+            // O podemos navegar manualmente si la estructura de App.js lo permite.
+            // Pero integrar con Context usualmente significa que el cambio de estado dispara re-renderizado del Navegador.
+            // Asumamos que App.js lo manejará o navegamos a Home.
+            // Si usamos Stack Navigator con condición, es automático.
+            // SI NO, empujamos. Asumamos estrategia de condición en App.js.
         } else {
             Alert.alert("Acceso Denegado", "PIN incorrecto");
         }
@@ -89,9 +90,11 @@ export default function LoginScreen({ navigation }) {
                                     <Picker
                                         selectedValue={selectedUser}
                                         onValueChange={(itemValue) => setSelectedUser(itemValue)}
+                                        dropdownIconColor="#000000"
+                                        style={{ color: '#000000' }}
                                     >
                                         {userList.map((u, index) => (
-                                            <Picker.Item key={index} label={u.name} value={u} />
+                                            <Picker.Item key={index} label={u.name} value={u} color="#000000" />
                                         ))}
                                     </Picker>
                                 </View>
@@ -132,7 +135,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#E5E5E5', // Concrete Grey
+        backgroundColor: '#E5E5E5', // Gris Concreto
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     content: {
@@ -152,7 +155,7 @@ const styles = StyleSheet.create({
     appName: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#D32F2F', // Corporate Red for Title
+        color: '#D32F2F', // Rojo Corporativo para Título
         letterSpacing: 1,
     },
     version: {
@@ -160,12 +163,12 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
     formContainer: {
-        backgroundColor: '#FFFFFF', // White form on Grey BG
+        backgroundColor: '#FFFFFF', // Formulario Blanco en Fondo Gris
         padding: 20,
         borderRadius: 8,
         elevation: 4,
         borderTopWidth: 5,
-        borderTopColor: '#D32F2F' // Red accent top
+        borderTopColor: '#D32F2F' // Acento rojo superior
     },
     loadingContainer: {
         alignItems: 'center',
@@ -179,7 +182,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         marginBottom: 8,
-        color: '#111', // Black Text
+        color: '#111', // Texto Negro
     },
     pickerContainer: {
         borderWidth: 1,
@@ -201,12 +204,12 @@ const styles = StyleSheet.create({
         color: '#000',
     },
     loginButton: {
-        backgroundColor: '#111', // Black Button
+        backgroundColor: '#111', // Botón Negro
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#D32F2F' // Red Border
+        borderColor: '#D32F2F' // Borde Rojo
     },
     loginButtonText: {
         color: 'white',

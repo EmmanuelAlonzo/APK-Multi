@@ -14,7 +14,7 @@ export default function HistoryScreen({ navigation }) {
     const role = user?.role?.toLowerCase() || 'auxiliar';
     const canEdit = ['administrador', 'supervisor', 'verificador'].includes(role);
     const canClearAll = role === 'administrador'; 
-    // All can delete single items per user request
+    // Todos pueden borrar ítems individuales a petición
 
     useFocusEffect(
         useCallback(() => {
@@ -56,10 +56,10 @@ export default function HistoryScreen({ navigation }) {
             // Find item to delete
             const item = history.find(i => i.id === id);
             if (item && item.data && item.data.Batch) {
-                 // 1. Delete from Sheet (Background) - Fire and forget
-                 deleteFromSheet(item.data.Batch, item.data.Grade).catch(err => console.error("Background delete failed", err));
+             // 1. Borrar de Hoja (Segundo Plano) - Disparar y olvidar
+             deleteFromSheet(item.data.Batch, item.data.Grade).catch(err => console.error("Fallo borrado segundo plano", err));
 
-                // 2. Smart Decrement Logic
+            // 2. Lógica de Decremento Inteligente
                 if (item.data.Grade && item.data.Date) {
                      try {
                         const [y, m, d] = item.data.Date.split('-').map(Number);
@@ -86,7 +86,7 @@ export default function HistoryScreen({ navigation }) {
             }
 
             await deleteHistoryItem(id);
-            await loadHistory(); // Await load to ensure UI sync
+            await loadHistory(); // Esperar carga para asegurar sincronía UI
         } catch (e) {
             console.error("Delete error:", e);
         } finally {
@@ -161,12 +161,12 @@ export default function HistoryScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#E5E5E5', // Grey
+        backgroundColor: '#121212', // Dark Background
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     header: {
         padding: 20,
-        backgroundColor: '#111', // Black
+        backgroundColor: '#000', // Black Header
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -179,18 +179,18 @@ const styles = StyleSheet.create({
     },
     backText: {
         fontSize: 16,
-        color: '#DDD', // Light
+        color: '#DDD', 
     },
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#FFF', // White Title
+        color: '#FFF', 
     },
     clearButton: {
         padding: 5,
     },
     clearText: {
-        color: '#D32F2F', // Red Text
+        color: '#D32F2F', 
         fontSize: 16,
         fontWeight: 'bold',
     },
@@ -198,24 +198,24 @@ const styles = StyleSheet.create({
         padding: 15,
     },
     card: {
-        backgroundColor: 'white',
+        backgroundColor: '#1E1E1E', // Dark Card
         borderRadius: 8,
         padding: 15,
         marginBottom: 10,
         elevation: 2,
         borderLeftWidth: 4,
-        borderLeftColor: '#333' // Dark Accent
+        borderLeftColor: '#D32F2F' // Red Accent
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginBottom: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: '#444',
         paddingBottom: 5,
     },
     date: {
-        color: '#666',
+        color: '#BBB', // Muted Text
         fontSize: 12,
         fontWeight: 'bold'
     },
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
         marginRight: 5
     },
     editText: {
-        color: '#FBC02D', // Yellow for edit
+        color: '#FBC02D', 
         fontSize: 16,
     },
     cardContent: {
@@ -239,11 +239,11 @@ const styles = StyleSheet.create({
     },
     itemText: {
         fontSize: 14,
-        color: '#333',
+        color: '#E0E0E0', // Light Text
     },
     bold: {
         fontWeight: 'bold',
-        color: '#000'
+        color: '#FFF' // White for Keys
     },
     emptyContainer: {
         flex: 1,
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     emptyText: {
-        color: '#888',
+        color: '#666',
         fontSize: 16,
     }
 });

@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { saveScriptUrl, getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage';
+import { saveScriptUrl, getScriptUrl, DEFAULT_SCRIPT_URL, savePreferredBrowser, getPreferredBrowser } from '../utils/storage';
 
 export default function SettingsScreen({ navigation, route }) {
-    // URL is now read-only logic or just fixed. 
-    // Requirement: "Elimina la opcion de editar el script... que nadie pueda tocarlo"
-    // We will just show it as info or hide it? "que si se debe actualizar sea mediante este codigo"
-    // So we will remove the input.
+    // URL ahora es lógica de solo lectura o fija.
     
     const [url, setUrl] = useState('');
+    const [selectedBrowser, setSelectedBrowser] = useState(null); // null = No seteado / Auto
     const { user, logout } = React.useContext(require('../context/AuthContext').AuthContext);
     const { updateUserPin } = require('../utils/api');
 
@@ -25,6 +23,14 @@ export default function SettingsScreen({ navigation, route }) {
     const loadSettings = async () => {
         const savedUrl = await getScriptUrl();
         setUrl(savedUrl || DEFAULT_SCRIPT_URL);
+        
+        const savedBrowser = await getPreferredBrowser();
+        setSelectedBrowser(savedBrowser);
+    };
+
+    const handleSelectBrowser = async (pkg) => {
+        setSelectedBrowser(pkg);
+        await savePreferredBrowser(pkg);
     };
 
     const handleChangePin = async () => {
@@ -64,8 +70,8 @@ export default function SettingsScreen({ navigation, route }) {
                     style: "destructive", 
                     onPress: async () => {
                        await logout();
-                       // Force reset to Login to avoid staying on Settings
-                       // (since Settings exists in both Auth and App stacks)
+                       // Forzar reinicio a Login para evitar quedarse en Configuración
+                       // (ya que Configuración existe en pilas Auth y App)
                        navigation.reset({
                            index: 0,
                            routes: [{ name: 'Login' }],
@@ -78,16 +84,46 @@ export default function SettingsScreen({ navigation, route }) {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
+            <ScrollView contentContainerStyle={styles.content}>
                 <Text style={styles.title}>Configuración</Text>
                 
-                {/* Script Info Only (No Edit) */}
+                {/* Solo Información de Script (No Editar) */}
                 <View style={styles.infoBox}>
                     <Text style={styles.label}>Estado de Conexión:</Text>
                     <Text style={styles.description}>
                         Conectado a Google Apps Script (V9 - Global SAE)
                     </Text>
                     <Text style={[styles.description, {fontSize: 10}]}>{url}</Text>
+                </View>
+
+                {/* --- SECCIÓN NAVEGADOR PREDETERMINADO --- */}
+                <View style={styles.section}>
+                    <Text style={styles.label}>Navegador para Base de Datos</Text>
+                    <Text style={styles.description}>Elige con qué app abrir los enlaces:</Text>
+                    
+                    <View style={styles.browserOptions}>
+                        {[
+                            { name: 'Chrome', pkg: 'com.android.chrome' },
+                            { name: 'Brave', pkg: 'com.brave.browser' },
+                            { name: 'Edge', pkg: 'com.microsoft.emmx' }
+                        ].map((b) => (
+                            <TouchableOpacity 
+                                key={b.name} 
+                                style={[
+                                    styles.browserOption, 
+                                    selectedBrowser === b.pkg && styles.browserOptionSelected
+                                ]}
+                                onPress={() => handleSelectBrowser(b.pkg)}
+                            >
+                                <Text style={[
+                                    styles.browserOptionText,
+                                    selectedBrowser === b.pkg && styles.browserOptionTextSelected
+                                ]}>
+                                    {b.name}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </View>
 
                 {/* --- SECCIÓN CAMBIAR PIN --- */}
@@ -125,7 +161,7 @@ export default function SettingsScreen({ navigation, route }) {
                         <Text style={styles.cancelButtonText}>Volver</Text>
                     </TouchableOpacity>
                 )}
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -133,7 +169,7 @@ export default function SettingsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#E5E5E5',
+        backgroundColor: '#121212', // Dark Background
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     content: {
@@ -144,37 +180,37 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 20,
         textAlign: 'center',
-        color: '#D32F2F' // Red Title
+        color: '#D32F2F' 
     },
     label: {
         fontSize: 16,
         fontWeight: 'bold',
         marginBottom: 8,
-        color: '#111'
+        color: '#E0E0E0' // Light Text
     },
     description: {
         fontSize: 14,
-        color: '#444',
+        color: '#AAA', // Muted Text
         marginBottom: 12,
     },
     input: {
-        backgroundColor: 'white',
+        backgroundColor: '#2C2C2C', // Dark Input
         borderWidth: 1,
-        borderColor: '#ccc',
+        borderColor: '#444',
         borderRadius: 8,
         padding: 12,
         marginBottom: 20,
         minHeight: 50,
-        color: '#000',
+        color: '#FFF', // White Input Text
     },
     button: {
-        backgroundColor: '#111', // Black
+        backgroundColor: '#000', 
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
         marginBottom: 10,
         borderWidth: 1,
-        borderColor: '#D32F2F', // Red Border
+        borderColor: '#D32F2F', 
     },
     buttonText: {
         color: 'white',
@@ -186,7 +222,7 @@ const styles = StyleSheet.create({
         borderWidth: 0,
     },
     cancelButtonText: {
-        color: '#666',
+        color: '#888',
         fontSize: 16,
     },
     section: {
@@ -194,30 +230,53 @@ const styles = StyleSheet.create({
     },
     divider: {
         height: 1,
-        backgroundColor: '#ccc',
+        backgroundColor: '#444',
         marginBottom: 20,
     },
     pinButton: {
-        backgroundColor: '#D32F2F', // Red Solid
+        backgroundColor: '#D32F2F', 
         borderWidth: 0
     },
     logoutButton: {
-        backgroundColor: '#FFF', 
+        backgroundColor: '#000', 
         borderColor: '#D32F2F',
         borderWidth: 1
     },
-    // Logout text override logic needed? No, buttonText is white. 
-    // Wait, if I make logoutButton White, buttonText needs to be Red.
-    // Let's keep logoutButton standard Black/Red border or maybe pure Red?
-    // User likes Red/Black. Let's make logout Red.
-    
     infoBox: {
-        backgroundColor: '#FFF',
+        backgroundColor: '#1E1E1E', // Dark Card
         padding: 15,
         borderRadius: 8,
         marginBottom: 20,
         borderLeftWidth: 4,
         borderLeftColor: '#D32F2F',
         elevation: 2
+    },
+    browserOptions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        marginTop: 5,
+        marginBottom: 15
+    },
+    browserOption: {
+        width: '48%',
+        backgroundColor: '#2C2C2C', // Dark Option
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#444',
+        marginBottom: 10,
+        alignItems: 'center'
+    },
+    browserOptionSelected: {
+        backgroundColor: '#D32F2F',
+        borderColor: '#D32F2F'
+    },
+    browserOptionText: {
+        color: '#DDD',
+        fontWeight: 'bold'
+    },
+    browserOptionTextSelected: {
+        color: '#fff'
     }
 });

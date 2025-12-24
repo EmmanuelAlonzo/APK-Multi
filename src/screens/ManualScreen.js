@@ -22,17 +22,17 @@ import {
 } from "../utils/storage";
 import { getNextBatchSequence, sendDataToSheet, fetchLastBatch, updateRemoteRow } from "../utils/api";
 import { AuthContext } from "../context/AuthContext";
-// PDF Generation will be handled in a separate utility or here if simple
+// La generación de PDF se manejará en una utilidad separada o aquí si es simple
 
 export default function ManualScreen({ navigation, route }) {
   const { user } = useContext(AuthContext); 
   const { updateSheetRow, fetchGlobalConfig, saveGlobalConfig } = require('../utils/api');
 
-  // Edit Mode Params
+  // Parámetros de Modo Edición
   const { isEditing, item } = route.params || {};
 
   const [sae, setSae] = useState(isEditing ? String(item.SAE || "") : "");
-  // Normalize grade to ensure it matches button values (e.g., "5.5" -> "5.50")
+  // Normalizar grado para asegurar que coincida con los valores de los botones (ej. "5.5" -> "5.50")
   const formattedGrade = isEditing && item.Grade 
         ? parseFloat(item.Grade).toFixed(2) 
         : "7.00";
@@ -41,7 +41,7 @@ export default function ManualScreen({ navigation, route }) {
   const [heat, setHeat] = useState(isEditing ? String(item.HeatNo || "") : "");
   const [bundle, setBundle] = useState(isEditing ? String(item.BundleNo || item.Coil || item.coil || "") : "");
   const [weight, setWeight] = useState(isEditing ? String(item.Weight || "") : "");
-  // Fix: use local date instead of UTC to avoid date skipping in evening
+  // Corrección: usar fecha local en lugar de UTC para evitar saltos de fecha en la tarde
   const getLocalDate = () => {
       const now = new Date();
       const Y = now.getFullYear();
@@ -57,47 +57,62 @@ export default function ManualScreen({ navigation, route }) {
   const [isFetchingSeq, setIsFetchingSeq] = useState(false);
   const [lastBatchId, setLastBatchId] = useState(null);
   const [saeMap, setSaeMap] = useState({});
-  const [globalSaeMap, setGlobalSaeMap] = useState({}); // New: Store global config map
+  const [globalSaeMap, setGlobalSaeMap] = useState({}); // Nuevo: Almacenar mapa de configuración global
+  const [lastBatchMap, setLastBatchMap] = useState({}); // Nuevo: Mapa local de Últimos Lotes por Grado
+  // const [debugLogs, setDebugLogs] = useState(""); // DEBUG REMOVED
+
 
   useEffect(() => {
-    console.log("DEBUG: ManualScreen Mounted v2 - Checking fallback logic"); // Version check
+    console.log("DEBUG: ManualScreen Montado v3 - Verificando lógica de escáner");
     if (!isEditing) {
         loadPersistedData();
+        
+        // --- LOGICA DE ESCÁNER ---
+        // Si venimos del escáner con datos
+        if (route.params?.scannedData) {
+            const { sae: s, grade: g, weight: w, heat: h, bundle: b } = route.params.scannedData;
+            
+            if (s) setSae(s);
+            if (g) setGrade(g); // Esto disparará prefetchSequence automáticamente
+            if (w) setWeight(w);
+            if (h) setHeat(h);
+            if (b) setBundle(b);
+            
+            // Opcional: Avisar al usuario
+            // Alert.alert("Escáner", "Datos cargados automáticamente.");
+        }
     }
-  }, []);
+  }, [route.params?.scannedData]);
 
   const loadPersistedData = async () => {
     const data = await getManualData();
     if (data.SAE_MAP) {
       setSaeMap(data.SAE_MAP);
-      if (data.SAE_MAP["7.00"]) {
-        setSae(data.SAE_MAP["7.00"]);
-      }
+    }
+    if (data.LAST_BATCH_MAP) {
+        setLastBatchMap(data.LAST_BATCH_MAP);
     }
   };
 
-  useEffect(() => {
-    if(!isEditing) {
-        setSae(saeMap[grade] || "");
-        prefetchSequence();
-    }
-  }, [grade, saeMap, dateStr]);
 
-  /* --- Global SAE Logic --- */
+
+  /* --- Lógica de SAE Global --- */
   const fetchConfig = async () => {
-    // Only fetch if not editing an existing item (we want to preserve its historical data)
+    // Solo buscar si no estamos editando un ítem existente
     if (isEditing) return;
     
-    // Fetch global config
+    // Obtener configuración global
     const configMap = await fetchGlobalConfig();
+    
     if (configMap) {
-        setGlobalSaeMap(configMap);
-        // If we have a global SAE for current grade, set it?
-        // Or wait for effect?
-        // Let's set it if current grade has one.
-        if (configMap[grade]) {
-            setSae(configMap[grade]);
-        }
+        // Verificar si realmente cambió para evitar re-renderizados innecesarios
+        // Esto previene que el useEffect dependiente de globalSaeMap se dispare y sobrescriba la entrada del usuario
+        setGlobalSaeMap(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(configMap)) {
+                return prev; // No cambiar estado si es idéntico
+            }
+            return configMap;
+        });
     }
   };
 
@@ -107,19 +122,20 @@ export default function ManualScreen({ navigation, route }) {
           return;
       }
       setLoading(true); 
-      const success = await saveGlobalConfig(sae, grade); // Pass grade
+      // ESTRATEGIA DEFINITIVA: Usar prefijo "G-" para forzar tratamiento de TEXTO y evitar duplicados numéricos.
+      // Clave será "G-10.00". Esto es único y string.
+      const safeKey = `G-${grade}`;
+      const success = await saveGlobalConfig(sae, safeKey); 
       setLoading(false);
       
       if (success) {
-          // 1. Update Global Map State immediately
-          const newGlobalMap = { ...globalSaeMap, [grade]: sae };
+          // Actualizar mapa local con la nueva clave (y la simple para fallback visual)
+          const newGlobalMap = { ...globalSaeMap, [grade]: sae, [safeKey]: sae };
           setGlobalSaeMap(newGlobalMap);
           
-          // 2. Update Local History Map State immediately (to stay in sync)
-          const newSaeMap = { ...saeMap, [grade]: sae };
-          setSaeMap(newSaeMap);
-          // Persist local history too, so it survives reload even if fetchConfig fails
-          saveManualData({ SAE_MAP: newSaeMap }).catch(e => console.log(e));
+          // ELIMINADO: No actualizar historial local aquí. 
+          // Mantener Global y Local separados asegura que si se borra el Global, 
+          // no caigamos en una copia local "fantasma" creada por la acción de Admin.
 
           Alert.alert("Éxito", `SAE Global para Grado ${grade} actualizado`);
       } else {
@@ -130,34 +146,69 @@ export default function ManualScreen({ navigation, route }) {
   useEffect(() => {
     if (!isEditing) {
         loadPersistedData();
-        fetchConfig(); // Fetch global SAE
+        fetchConfig(); // Obtener SAE global
         prefetchSequence();
     }
-  }, []); // Run once on mount
+  }, []); // Ejecutar una vez al montar
 
-  // ... (keeping other effects but removing duplications if any)
+  // ... (manteniendo otros efectos pero eliminando duplicados si los hay)
 
+  // Ayudante para encontrar SAE de forma robusta
+  const getSaeFromMap = (map, g) => {
+      if (!map) return null;
+      
+      // 1. Intentar clave Segura con Prefijo "G-" (Prioridad Máxima)
+      if (map[`G-${g}`]) return map[`G-${g}`];
+      
+      // 2. Intentar coincidencia directa
+      if (map[g]) return map[g];
+      
+      // 3. Intentar normalización numérica (legacy)
+      const asNum = parseFloat(g).toString(); 
+      if (map[asNum]) return map[asNum];
+
+      // 4. Búsqueda profunda numérica
+      const target = parseFloat(g);
+      const key = Object.keys(map).find(k => parseFloat(k) === target);
+      if (key) return map[key];
+
+      return null;
+  };
+  
+  const prevGradeRef = React.useRef(grade);
+  
   useEffect(() => {
-    // Determine if we should clear prefetched seq when parameters change
-    // Logic: if grade/date changes, prefetch again.
-    if(!isEditing) {
-        // Global SAE logic: If we have a global SAE for this grade, use it.
-        // User requested Global SAE updates "everyone".
-        // If globalSaeMap has entry for this grade, prefer it over previous local input unless typed?
-        // Simplicity: When switching grade, reset to global default if exists.
+    if (!isEditing) {
+        // Determinar si cambiamos de grado
+        const hasGradeChanged = prevGradeRef.current !== grade;
+        prevGradeRef.current = grade;
+
+        // Determinar SAE basado ÚNICAMENTE en Global (ignorando historial local para evitar "fantasmas")
+        const globalValue = getSaeFromMap(globalSaeMap, grade);
         
-        if (globalSaeMap[grade]) {
-             setSae(globalSaeMap[grade]);
-        } else if (saeMap[grade]) {
-             // Fallback to local history if no global
-             setSae(saeMap[grade]);
+        
+        // Estrategia: "Solo Global o Vacío"
+        // Si hay valor global, úsalo. Si no, permite que el usuario escriba libremente.
+        
+        if (hasGradeChanged) {
+            // Si el usuario acaba de cambiar el grado, limpiamos el campo (o ponemos el global si hay).
+            setSae(globalValue || "");
+            
+            // OPTIMIZACIÓN UI: Mostrar Último Lote CACHEADO inmediatamente
+            if (lastBatchMap[grade]) {
+                setLastBatchId(lastBatchMap[grade]); // Feedback instantáneo
+            } else {
+                setLastBatchId(null);
+            }
+            
+            prefetchSequence(); 
         } else {
-             setSae(""); // Clear if neither
+             if (globalValue) {
+                 setSae(globalValue);
+             }
         }
-        
-        prefetchSequence();
     }
-  }, [grade, dateStr, globalSaeMap]); // Added globalSaeMap dependency
+  }, [grade, globalSaeMap]); // Eliminada dependencia dateStr para evitar reinicios por fecha
 
   const prefetchSequence = async () => {
       setLastBatchId(null);
@@ -167,12 +218,11 @@ export default function ManualScreen({ navigation, route }) {
            const [yIn, mIn, dIn] = dateStr.split('-').map(Number);
            const dateObj = new Date(yIn, mIn - 1, dIn);
            
-           // Parallel Execution for Speed
+           // Ejecución Paralela para Velocidad
            const dailyPromise = getNextBatchSequence(grade, dateObj);
            const absolutePromise = fetchLastBatch(grade);
 
-           // Wait for both (or handle failures gracefully)
-           // We use allSettled or just all. simple all is strict, but fetchLastBatch handles its own errors returning null.
+           // Esperar a ambos (o manejar fallos visualmente)
            const [seqData, absoluteLast] = await Promise.all([dailyPromise, absolutePromise]);
 
            setPrefetchedSeq(seqData);
@@ -186,7 +236,7 @@ export default function ManualScreen({ navigation, route }) {
               foundDaily = true;
            }
 
-           // Fallback if daily not found
+           // Respaldo si no se encuentra diario
            if (!foundDaily) {
                 if (absoluteLast && absoluteLast.trim().length > 0 && absoluteLast !== "null") {
                     setLastBatchId(absoluteLast);
@@ -212,18 +262,18 @@ export default function ManualScreen({ navigation, route }) {
     try {
       let batchId = isEditing ? item.Batch : "UNKNOWN";
 
-      // --- EDIT MODE ---
+      // --- MODO EDICIÓN ---
       if (isEditing) {
           const updateData = {
-              Batch: batchId, // Key
+              Batch: batchId, // Clave
               SAE: sae,
               HeatNo: heat,
               BundleNo: bundle,
               Weight: weight,
-              // Grade, Date usually not editable easily as they define Batch ID, but we allow them to pass through
-              // If Admin changes Grade, Batch ID logically mismatch? 
-              // User requirement: "Editar los registros...". 
-              // For simplicity, we update fields on the EXISTING Batch ID. Changing Batch ID is dangerous.
+              // Grado, Fecha usualmente no editables fácilmente ya que definen el ID del Lote, pero permitimos que pasen
+              // ¿Si Admin cambia Grado, ID de Lote no coincide lógicamente? 
+              // Requisito de usuario: "Editar los registros...". 
+              // Por simplicidad, actualizamos campos en el ID de Lote EXISTENTE. Cambiar ID de Lote es peligroso.
           };
 
           if (route.params?.isRemote) {
@@ -233,22 +283,22 @@ export default function ManualScreen({ navigation, route }) {
               return;
           }
 
-          // Update Sheet (Local Edit)
+          // Actualizar Hoja (Edición Local)
           await updateSheetRow(updateData);
           
-          // Update History (Local) requires modifying the item in storage
-          // We can't easily modify one item in history list from here without a global store action or re-read.
-          // TRICK: We will not update local history here, BUT `HistoryScreen` usually reloads. 
-          // However, to be nice, we should try. 
-          // For now, let's just alert and go back.
+          // Actualizar Historial (Local) requiere modificar el ítem en almacenamiento
+          // No podemos modificar fácilmente un ítem en lista historial desde aquí sin acción global de store o re-lectura.
+          // TRUCO: No actualizaremos historial local aquí, PERO `HistoryScreen` usualmente recarga. 
+          // Sin embargo, para ser amables, deberíamos intentar. 
+          // Por ahora, solo alertar y volver.
           Alert.alert("Éxito", "Registro actualizado");
           navigation.goBack();
           return;
       }
 
-      // --- NEW MODE ---
-      // 1. Generate Batch ID
-      // Parse selected date
+      // --- MODO NUEVO ---
+      // 1. Generar ID de Lote
+      // Parsear fecha seleccionada
       const [yIn, mIn, dIn] = dateStr.split("-").map(Number);
       const dateObj = new Date(yIn, mIn - 1, dIn);
       const yLocal = dateObj.getFullYear().toString().slice(-2);
@@ -278,10 +328,10 @@ export default function ManualScreen({ navigation, route }) {
 
       let prefix = seqData && seqData.dateStr ? seqData.dateStr : localDateStr;
 
-      // Handle Date Rollover (if server advanced the date)
+      // Manejar Cambio de Fecha (si servidor avanzó la fecha)
       let finalDateToSave = dateStr;
       if (prefix !== localDateStr) {
-           // Parse YYMMDD to YYYY-MM-DD
+           // Parsear YYMMDD a YYYY-MM-DD
            const yy = prefix.substring(0, 2);
            const mm = prefix.substring(2, 4);
            const dd = prefix.substring(4, 6);
@@ -289,23 +339,23 @@ export default function ManualScreen({ navigation, route }) {
            Alert.alert("Aviso", `Secuencia llena. Se cambió la fecha a ${finalDateToSave}.`);
       }
 
-      // Check for overflow (sanity check)
+      // Verificar desbordamiento (comprobación de cordura)
       if (seqToUse > 999) { Alert.alert("Error", "Secuencia > 999"); setLoading(false); return; }
 
       const s = seqToUse.toString().padStart(3, "0");
       batchId = `${prefix}I${s}`;
 
-      // 2. Prepare Data
+      // 2. Preparar Datos
       const dataToSave = {
         SAE: sae, Grade: grade, HeatNo: heat, Batch: batchId, BundleNo: bundle, Weight: weight, Date: finalDateToSave,
         Operator: user ? user.name : "Unknown",
       };
 
-      // 3. Save
-      // 3. Save
+      // 3. Guardar
+      // 3. Guardar
       await saveScanToHistory(dataToSave);
       
-      // Await sheet sync to ensure server has the data before we potentially ask for the next sequence
+      // Esperar sincronización hoja para asegurar datos en servidor antes de pedir potencialmente la siguiente secuencia
       try {
           await sendDataToSheet(dataToSave);
       } catch (e) {
@@ -314,15 +364,19 @@ export default function ManualScreen({ navigation, route }) {
       }
 
       const newSaeMap = { ...saeMap, [grade]: sae };
+      const newLastBatchMap = { ...lastBatchMap, [grade]: batchId }; // Actualizar mapa de lotes
+      
       setSaeMap(newSaeMap); 
-      await saveManualData({ SAE_MAP: newSaeMap }); 
+      setLastBatchMap(newLastBatchMap);
+
+      await saveManualData({ SAE_MAP: newSaeMap, LAST_BATCH_MAP: newLastBatchMap }); 
       await saveLocalSequence(storageKey, seqToUse);
 
       Alert.alert("Éxito", `Datos guardados. Lote: ${batchId}`);
       
       setHeat(""); setBundle(""); setWeight("");
       
-      // Force fresh sequence fetch next time
+      // Forzar obtención secuencia fresca próxima vez
       setPrefetchedSeq(null);
       prefetchSequence();
 
@@ -342,40 +396,25 @@ export default function ManualScreen({ navigation, route }) {
 
   const hasPrivilege = user && ['administrador', 'supervisor', 'verificador'].includes(user.role);
 
-  // Consolidated Effect for Grade Change & Auto-fill
-  // Refresh sequence when screen comes into focus
+  // Efecto Consolidado para Cambio de Grado y Auto-relleno
+  // Refrescar secuencia cuando la pantalla entra en foco
   useFocusEffect(
     React.useCallback(() => {
       if(!isEditing) {
-          prefetchSequence();
+          fetchConfig(); // Asegurar que tenemos las últimas SAE Globales de otros dispositivos
+          prefetchSequence(); // También actualizar secuencia
       }
-    }, [grade, dateStr, isEditing]) // Dependencies trigger re-run if changed too, but mainly focus
+    }, [grade, dateStr, isEditing]) // Dependencias disparan re-ejecución si cambian también, pero principalmente el foco
   );
 
-  useEffect(() => {
-    if(!isEditing) {
-        // Priority 1: Global SAE for this Grade
-        if (globalSaeMap[grade]) {
-             setSae(globalSaeMap[grade]);
-        } 
-        // Priority 2: Local History Map (if no global)
-        else if (saeMap[grade]) {
-             setSae(saeMap[grade]);
-        } 
-        // Default: Empty
-        else {
-             setSae(""); 
-        }
-        
-        prefetchSequence();
-    }
-  }, [grade, globalSaeMap, saeMap]); // Ensure Date doesn't trigger unrelated SAE changes, but prefetch needs it. Removed dateStr from this dependency to separate concerns? No, prefetch needs it.
+  // ELIMINADO: useEffect duplicado que causaba conflictos con la lógica principal.
+  // La lógica principal (líneas 150-180 aprox) ya maneja 'setSae' basándose SOLO en Global.
 
-  // Separate Pre-fetch trigger to avoid overriding SAE on just date change?
-  // Actually, if date changes, SAE shouldn't change, but Sequence should.
-  // The above effect resets SAE on date change if I included dateStr?
-  // Wait, I included dateStr in the dependency array in the previous file content. 
-  // If date changes, `globalSaeMap[grade]` is still same, so it re-sets SAE to same value. Safe.
+  // ¿Disparador Pre-fetch separado para evitar sobrescribir SAE en solo cambio de fecha?
+  // Realmente, si fecha cambia, SAE no debería cambiar, pero Secuencia sí.
+  // ¿El efecto superior reinicia SAE al cambiar fecha si incluí dateStr?
+  // Espera, incluí dateStr en array dependencias en el contenido de archivo previo. 
+  // Si fecha cambia, `globalSaeMap[grade]` sigue igual, así que re-establece SAE al mismo valor. Seguro.
 
   return (
     <View style={styles.container}>
@@ -394,12 +433,14 @@ export default function ManualScreen({ navigation, route }) {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.form}>
-          {/* Last Batch Display - Persistent */}
+          {/* Visualización Último Lote - Persistente */}
           <View style={styles.infoBox}>
-              {isFetchingSeq ? (
+              {/* DEBUG REMOVED */}
+              
+              {isFetchingSeq && !lastBatchId ? ( // Solo mostrar "Sincronizando" si NO tenemos un dato cacheado para mostrar
                   <Text style={styles.infoText}>Sincronizando secuencia...</Text>
               ) : lastBatchId ? (
-                  <Text style={styles.infoText}>Último Lote: {lastBatchId}</Text>
+                  <Text style={styles.infoText}>Último Lote: {lastBatchId} {isFetchingSeq ? "..." : ""}</Text>
               ) : (
                   <Text style={[styles.infoText, { color: '#888' }]}>Último Lote: --</Text>
               )}
@@ -442,9 +483,9 @@ export default function ManualScreen({ navigation, route }) {
                 </TouchableOpacity>
             </View>
           ) : (
-            // Hidden for normal users, maybe show a small label?
-            // "Eliminales ese campo" -> Remove input.
-            // Let's show a Read-Only Text so they know it's being applied.
+            // Oculto para usuarios normales, ¿quizás mostrar etiqueta pequeña?
+            // "Eliminales ese campo" -> Eliminar entrada.
+            // Mostremos Texto Solo Lectura para que sepan que se aplica.
              <View style={styles.inputGroup}>
                 <Text style={styles.label}>SAE (Automático)</Text>
                 <Text style={{fontSize: 16, color: '#555', padding: 12, backgroundColor: '#f0f0f0', borderRadius: 8}}>
@@ -557,12 +598,12 @@ export default function ManualScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#E5E5E5", // "Atenuar blanco" -> Concrete Grey
+    backgroundColor: "#121212", // Dark Background
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
   header: {
     padding: 20,
-    backgroundColor: "#111", // Black Header
+    backgroundColor: "#000", // Pure Black Header
     flexDirection: "row",
     alignItems: "center",
     elevation: 4,
@@ -574,36 +615,33 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 16,
-    color: "#DDD", // Light grey back text
+    color: "#DDD",
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "white", // White Title
+    color: "white",
   },
   form: {
     padding: 20,
   },
   inputGroup: {
     marginBottom: 20,
-    backgroundColor: '#F5F5F5', // Soft container for input groups? Or just independent inputs? 
-    // Let's keep it simple, inputs on the grey bg might be hard if not contrasty.
-    // Let's make inputs white on grey bg.
   },
   label: {
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 8,
-    color: "#333", // Dark Grey for readability
+    color: "#E0E0E0", // Light Text
   },
   input: {
     borderWidth: 1,
-    borderColor: "#CCC", // Softer border
+    borderColor: "#444", // Dark border
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: "#FFFFFF", // White Input stands out on Grey BG
-    color: "#000",
+    backgroundColor: "#2C2C2C", // Dark Input
+    color: "#FFF", // White Text
   },
   gradeContainer: {
     flexDirection: "row",
@@ -614,26 +652,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: "#D0D0D0", // Slightly darker unselected
+    backgroundColor: "#333", // Dark Grey Button
+    borderWidth: 1,
+    borderColor: "#555"
   },
   gradeSelected: {
-    backgroundColor: "#D32F2F", // Brand Red Selected
+    backgroundColor: "#D32F2F", 
+    borderColor: "#D32F2F"
   },
   gradeText: {
-    color: "#333",
+    color: "#EEE",
   },
   gradeTextSelected: {
     color: "white",
     fontWeight: "bold",
   },
   saveButton: {
-    backgroundColor: "#111", // Black Button
+    backgroundColor: "#000",
     padding: 15,
     borderRadius: 8,
     alignItems: "center",
     marginTop: 20,
     borderWidth: 1,
-    borderColor: '#D32F2F', // Red Border
+    borderColor: '#D32F2F', 
   },
   disabled: {
     opacity: 0.7,
@@ -645,21 +686,26 @@ const styles = StyleSheet.create({
     letterSpacing: 1
   },
   editButton: {
-    backgroundColor: '#D32F2F', // Red Button for Edit/Update
+    backgroundColor: '#D32F2F',
     borderWidth: 0
   },
   infoBox: {
-    backgroundColor: '#FFF', // White box
-    padding: 10,
+    backgroundColor: '#1E1E1E', // Dark Card
+    padding: 15,
     borderRadius: 8,
     marginBottom: 20,
     borderLeftWidth: 5,
-    borderLeftColor: '#D32F2F', // Red Accent
+    borderLeftColor: '#D32F2F', 
     alignItems: 'center',
-    elevation: 2
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   infoText: {
-    color: '#333',
-    fontWeight: 'bold'
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 16
   }
 });

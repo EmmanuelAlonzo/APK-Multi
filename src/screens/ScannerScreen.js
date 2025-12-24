@@ -5,13 +5,13 @@ import { saveScanToHistory } from '../utils/storage';
 import { AuthContext } from '../context/AuthContext'; 
 
 export default function ScannerScreen({ navigation }) {
-    const { user } = useContext(AuthContext); // Get authenticated user
+    const { user } = useContext(AuthContext); // Obtener usuario autenticado
     const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
     const [scannedData, setScannedData] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
 
-    const [torch, setTorch] = useState(false); // Flashlight state
+    const [torch, setTorch] = useState(false); // Estado de linterna
 
     if (!permission) {
         return <View />;
@@ -26,45 +26,93 @@ export default function ScannerScreen({ navigation }) {
         );
     }
 
+    const { parseSteelLabel } = require('../utils/qrParser');
+    const { getNextBatchSequence, sendDataToSheet, fetchLastBatch } = require('../utils/api');
+    const { getLocalSequence, saveLocalSequence } = require('../utils/storage');
+
     const handleBarCodeScanned = ({ type, data }) => {
         setScanned(true);
-        setScannedData(data);
+        const parsed = parseSteelLabel(data);
+        setScannedData(parsed); 
         setModalVisible(true);
     };
 
-    const handleSave = async () => {
-        // Here we can parse the data if it's JSON
-        let dataToSave = scannedData;
+    const handleSmartSave = async () => {
+        if (!scannedData || !scannedData.grade || !scannedData.weight) {
+            Alert.alert("Error", "Faltan datos críticos (Grado o Peso) para generar el lote.");
+            return;
+        }
+
+        const { sae, grade, heat, weight, bundle } = scannedData;
+        const operator = user ? user.name : "Unknown";
+        
+        // 1. Calcular Fecha Local
+        const now = new Date();
+        const Y = now.getFullYear();
+        const M = (now.getMonth() + 1).toString().padStart(2, '0');
+        const D = now.getDate().toString().padStart(2, '0');
+        const dateStr = `${Y}-${M}-${D}`; // YYYY-MM-DD
+        
+        const yLocal = now.getFullYear().toString().slice(-2);
+        const mLocal = (now.getMonth() + 1).toString().padStart(2, '0');
+        const dLocal = now.getDate().toString().padStart(2, '0');
+        const localDateStr = `${yLocal}${mLocal}${dLocal}`; // YYMMDD
+
+        Alert.alert("Guardando...", "Generando lote y enviando datos...");
+
         try {
-            const parsed = JSON.parse(scannedData);
-            dataToSave = parsed;
-        } catch (e) {
-            // Not JSON, keep as string
-        }
+            // 2. Obtener Secuencia
+            // Intentar obtener del servidor, fallback a local
+            const seqData = await getNextBatchSequence(grade, now);
+            let seqToUse = 1;
+            let prefix = localDateStr;
 
-        // Attach Operator
-        if (typeof dataToSave === 'object') {
-            dataToSave.Operator = user ? user.name : "Unknown";
-        } else {
-            // Converts string to object to attach operator?
-            // Or we just save object wrapper? 
-            // Current storage handles mixed, but let's wrap it to be consistent with sheet columns.
-            dataToSave = {
-                RawData: dataToSave,
-                Operator: user ? user.name : "Unknown",
-                Date: new Date().toISOString()
+            if (seqData && seqData.seq) {
+                seqToUse = seqData.seq;
+                if (seqData.dateStr) prefix = seqData.dateStr;
+            } else {
+                 // Fallback local
+                 const storageKey = `${localDateStr}_${grade}`;
+                 const localSeq = await getLocalSequence(storageKey);
+                 seqToUse = localSeq + 1;
+            }
+
+            // Validar límites
+            if (seqToUse > 999) { Alert.alert("Error", "Secuencia > 999"); return; }
+
+            // 3. Construir Batch ID
+            const s = seqToUse.toString().padStart(3, "0");
+            const batchId = `${prefix}I${s}`;
+
+            // 4. Guardar
+            const dataToSave = {
+                SAE: sae || "SAE Genérico", // Default si no hay
+                Grade: grade,
+                HeatNo: heat || "N/A",
+                Batch: batchId,
+                BundleNo: bundle || "",
+                Weight: weight,
+                Date: dateStr,
+                Operator: operator
             };
-        }
 
-        const success = await saveScanToHistory(dataToSave);
-        if (success) {
-            Alert.alert("Guardado", "Datos guardados en el historial");
+            await saveScanToHistory(dataToSave);
+            await sendDataToSheet(dataToSave); // Esto puede fallar si no hay internet
+
+            // Actualizar contador local
+            const storageKey = `${localDateStr}_${grade}`;
+            await saveLocalSequence(storageKey, seqToUse);
+
+            Alert.alert("¡Éxito!", `Lote Generado: ${batchId}\nGuardado en Historial y Hoja.`);
             setModalVisible(false);
             setScanned(false);
-        } else {
-            Alert.alert("Error", "No se pudo guardar");
+
+        } catch (e) {
+            Alert.alert("Error", "Fallo al guardar: " + e.message);
         }
     };
+
+
 
     return (
         <View style={styles.container}>
@@ -92,6 +140,7 @@ export default function ScannerScreen({ navigation }) {
                 </View>
             )}
 
+            {/* Modal de Confirmación Inteligente */}
             <Modal
                 animationType="slide"
                 transparent={true}
@@ -103,17 +152,52 @@ export default function ScannerScreen({ navigation }) {
             >
                 <View style={styles.centeredView}>
                     <View style={styles.modalView}>
-                        <Text style={styles.modalTitle}>Datos Escaneados</Text>
-                        <ScrollView style={styles.dataScroll}>
-                            <Text style={styles.modalText}>{scannedData}</Text>
-                        </ScrollView>
+                        <Text style={styles.modalTitle}>Etiqueta Detectada</Text>
+                        
+                        {scannedData ? (
+                            <View style={styles.dataContainer}>
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>SAE:</Text>
+                                    <Text style={styles.value}>{scannedData.sae || "---"}</Text>
+                                </View>
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Grado:</Text>
+                                    <Text style={styles.value}>{scannedData.grade || "---"}</Text>
+                                </View>
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Peso:</Text>
+                                    <Text style={styles.value}>{scannedData.weight ? `${scannedData.weight} Kg` : "---"}</Text>
+                                </View>
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Colada:</Text>
+                                    <Text style={styles.value}>{scannedData.heat || "---"}</Text>
+                                </View>
+                                <View style={styles.row}>
+                                    <Text style={styles.label}>Coil:</Text>
+                                    <Text style={styles.value}>{scannedData.bundle || "---"}</Text>
+                                </View>
+                                
+                                {(!scannedData.grade || !scannedData.weight) && (
+                                    <View>
+                                        <Text style={{color:'red', marginTop:10, fontWeight:'bold', textAlign:'center'}}>
+                                            ⚠️ Faltan datos clave (Grado/Peso)
+                                        </Text>
+                                        <Text style={{fontSize: 10, color: '#888', marginTop: 5, textAlign: 'center'}}>
+                                            Raw: {JSON.stringify(scannedData.raw)}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        ) : (
+                            <Text>Analizando...</Text>
+                        )}
                         
                         <View style={styles.buttonContainer}>
                             <TouchableOpacity
                                 style={[styles.button, styles.buttonSave]}
-                                onPress={handleSave}
+                                onPress={handleSmartSave}
                             >
-                                <Text style={styles.textStyle}>Guardar</Text>
+                                <Text style={styles.textStyle}>GUARDAR Y GENERAR LOTE</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.button, styles.buttonClose]}
@@ -122,12 +206,13 @@ export default function ScannerScreen({ navigation }) {
                                     setScanned(false);
                                 }}
                             >
-                                <Text style={styles.textStyle}>Cancelar</Text>
+                                <Text style={[styles.textStyle, { color: '#333' }]}>Cancelar</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
+
         </View>
     );
 }
@@ -147,28 +232,25 @@ const styles = StyleSheet.create({
     },
     modalView: {
         margin: 20,
-        backgroundColor: '#E5E5E5', // Grey Modal
-        borderRadius: 8,
-        padding: 35,
+        backgroundColor: '#1E1E1E', // Dark Grey Modal
+        borderRadius: 10,
+        padding: 30,
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.5,
-        shadowRadius: 4,
+        shadowRadius: 5,
         elevation: 10,
         width: '90%',
         maxHeight: '80%',
-        borderWidth: 2,
-        borderColor: '#D32F2F', // Red Border
+        borderWidth: 1,
+        borderColor: '#333', 
     },
     modalTitle: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: 'bold',
-        marginBottom: 15,
-        color: '#111',
+        marginBottom: 20,
+        color: '#FFF', // White Title
     },
     dataScroll: {
         width: '100%',
@@ -179,28 +261,30 @@ const styles = StyleSheet.create({
     },
     buttonContainer: {
         flexDirection: 'row',
-        gap: 10,
+        gap: 15,
+        justifyContent: 'center',
+        width: '100%'
     },
     button: {
-        borderRadius: 4,
-        padding: 10,
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
         elevation: 2,
-        minWidth: 100,
+        flex: 1,
     },
     buttonSave: {
-        backgroundColor: '#111', // Black
-        borderWidth: 1,
-        borderColor: '#D32F2F', 
+        backgroundColor: '#D32F2F', // Red Primary
     },
     buttonClose: {
-        backgroundColor: '#FFF',
+        backgroundColor: 'transparent',
         borderWidth: 1,
-        borderColor: '#333'
+        borderColor: '#666',
     },
     textStyle: {
         color: 'white',
         fontWeight: 'bold',
         textAlign: 'center',
+        fontSize: 14
     },
     // Need explicit text color for Close button since it's white?
     // Yes, or simplify. Let's make Close Red.
@@ -210,30 +294,61 @@ const styles = StyleSheet.create({
     modalText: {
         marginBottom: 15,
         textAlign: 'center',
-        color: '#333',
+        color: '#DDD',
         fontSize: 16
     },
     torchButton: {
         position: 'absolute',
         top: 50,
         right: 20,
-        backgroundColor: 'rgba(255,255,255,0.2)', // Subtler
-        padding: 15,
-        borderRadius: 30,
+        backgroundColor: 'rgba(0,0,0,0.5)', // Darker transparent
+        padding: 12,
+        borderRadius: 50,
         borderWidth: 1,
-        borderColor: '#FFF'
+        borderColor: 'rgba(255,255,255,0.3)'
     },
     torchText: {
         color: 'white',
+        fontSize: 12,
         fontWeight: 'bold',
     },
     rescanContainer: {
         position: 'absolute',
         bottom: 50,
         alignSelf: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: '#333', // Dark pill
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 30,
+        elevation: 5,
+        borderWidth: 1,
+        borderColor: '#555'
+    },
+    dataContainer: {
+        width: '100%',
+        marginBottom: 25,
+        backgroundColor: '#2C2C2C', // Inner Dark Card
         padding: 15,
         borderRadius: 8,
-        elevation: 5
+        borderLeftWidth: 3,
+        borderLeftColor: '#D32F2F'
+    },
+    row: {
+        flexDirection: 'row',
+        marginBottom: 10,
+        borderBottomWidth: 1,
+        borderColor: '#eee',
+        paddingBottom: 4
+    },
+    label: {
+        width: 80,
+        fontWeight: 'bold',
+        color: '#555'
+    },
+    value: {
+        flex: 1,
+        fontWeight: 'bold',
+        color: '#000',
+        fontSize: 16
     }
 });

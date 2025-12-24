@@ -2,11 +2,11 @@ import { getScriptUrl, DEFAULT_SCRIPT_URL } from './storage';
 
 export const getActiveScriptUrl = async () => {
     const url = await getScriptUrl();
-    return url || DEFAULT_SCRIPT_URL; // Fallback to default if not set/null? 
-    // Wait, the requirement says "option from start to set sheet".
-    // If it returns null, we should probably prompt user. 
-    // But for api calls, we might want a fallback if they skip it?
-    // Let's assume if it's null, the App should redirect to Settings.
+    return url || DEFAULT_SCRIPT_URL; // Respaldo a predeterminado si no está configurado o es null
+    // Espera, el requisito dice "opción desde el inicio para configurar hoja".
+    // Si devuelve null, probablemente deberíamos preguntar al usuario.
+    // Pero para llamadas api, ¿queremos un respaldo si lo omiten?
+    // Asumamos que si es null, la App debería redirigir a Configuración.
 };
 
 export const getNextBatchSequence = async (grade, dateObj = null) => {
@@ -14,18 +14,18 @@ export const getNextBatchSequence = async (grade, dateObj = null) => {
     if (!scriptUrl) throw new Error("Script URL not configured");
 
     const now = dateObj || new Date();
-    // YYMMDD format for internal logic/return
+    // Formato YYMMDD para lógica interna/retorno
     const yStr = now.getFullYear().toString().slice(-2);
     const mStr = (now.getMonth() + 1).toString().padStart(2, '0');
     const dStr = now.getDate().toString().padStart(2, '0');
     const dateStr = `${yStr}${mStr}${dStr}`;
 
-    // YYMMDD for Query Param (Legacy script likely uses this key)
+    // YYMMDD para Parámetro de Consulta (Script legado probablemente usa esta clave)
     const queryDate = `${yStr}${mStr}${dStr}`;
 
     let url = `${scriptUrl}?grade=${grade}&date=${queryDate}&_t=${Date.now()}`;
     
-    console.log("Fetching sequence from:", url);
+    console.log("Obteniendo secuencia desde:", url);
 
     try {
         const response = await fetch(url);
@@ -35,24 +35,24 @@ export const getNextBatchSequence = async (grade, dateObj = null) => {
         }
         
         const text = await response.text();
-        console.log("Sequence API Response:", text); // DEBUG LOG
+        console.log("Respuesta API Secuencia:", text); // REGISTRO DE DEPURACIÓN
         
         try {
             const data = JSON.parse(text);
-            // The script returns { "result": "success", "maxSeq": N }
-            // We need to return { seq: N+1, dateStr: ... }
+            // El script devuelve { "result": "success", "maxSeq": N }
+            // Necesitamos devolver { seq: N+1, dateStr: ... }
             let seq = 1;
             let lastSeq = null;
             if (data && typeof data.maxSeq !== 'undefined') {
                 const max = parseInt(data.maxSeq);
                 if (!isNaN(max)) {
-                    lastSeq = max; // Capture maxSeq as lastSeq
+                    lastSeq = max; // Capturar maxSeq como lastSeq
                     seq = max + 1;
                 }
             }
             if (seq > 999) seq = 1; 
             
-            // Check for effectiveDate from server (Date Rollover)
+            // Verificar effectiveDate desde el servidor (Cambio de Fecha)
             let finalDateStr = dateStr;
             if (data && data.effectiveDate) {
                 finalDateStr = data.effectiveDate;
@@ -107,9 +107,9 @@ export const fetchExternalBulkData = async (externalUrl) => {
         
         const json = await response.json();
         
-        // Handle error returned by GAS
+        // Manejar error devuelto por GAS
         if (json.error) {
-            throw new Error("Server Error: " + json.error);
+            throw new Error("Error del Servidor: " + json.error);
         }
 
         return json;
@@ -130,10 +130,10 @@ export const fetchPaginatedData = async (page = 1, pageSize = 100) => {
         const json = await response.json();
         if (json.error) throw new Error(json.error);
         
-        // NORMALIZE DATA (Handle Spanish/English Keys & Fuzzy Matching)
+        // NORMALIZAR DATOS (Manejar Claves Español/Inglés y Coincidencia Difusa)
         if (json.data && Array.isArray(json.data)) {
             json.data = json.data.map(item => {
-                // Helper to find value by regex key
+                // Ayudante para encontrar valor por clave regex
                 const findVal = (regex) => {
                     const key = Object.keys(item).find(k => regex.test(k));
                     return key ? item[key] : undefined;
@@ -144,11 +144,11 @@ export const fetchPaginatedData = async (page = 1, pageSize = 100) => {
                     Grade: findVal(/(grade|grado)/i) || '',
                     SAE: findVal(/(sae)/i) || '',
                     HeatNo: findVal(/(heat|heatno|colada)/i) || '',
-                    // Bundle: Look for Bundle, Coil, Rollo, Bobina, Paquete (matched anywhere in key)
+                    // Bundle: Buscar Bundle, Coil, Rollo, Bobina, Paquete (coincidencia en cualquier lugar de la clave)
                     BundleNo: findVal(/(bundle|bundleno|coil|rollo|paquete|bobina)/i) || '',
                     Weight: findVal(/(weight|peso)/i) || 0,
                     Date: findVal(/(date|fecha)/i) || '',
-                    ...item // Keep original keys
+                    ...item // Mantener claves originales
                 };
             });
         }
@@ -235,34 +235,34 @@ export const fetchUsersFromScript = async () => {
         if (Array.isArray(json)) {
             return json;
         } else {
-            console.error("fetchUsersFromScript: Expected array but got", json);
+            console.error("fetchUsersFromScript: Se esperaba array pero se obtuvo", json);
             const typeVar = typeof json;
             const preview = JSON.stringify(json).substring(0, 50);
             throw new Error(`Respuesta inválida del servidor (No es array). Tipo: ${typeVar}. Contenido: ${preview}...`);
         }
     } catch (error) {
-        console.error("Error fetching users:", error);
-        throw error; // Rethrow to handle in Context
+        console.error("Error obteniendo usuarios:", error);
+        throw error; // Relanzar para manejar en Contexto
     }
 };
 
-// Deprecated: fetchSheetCsv (Removing or keeping as fallback? Removing per plan)
+    // Obsoleto: fetchSheetCsv (¿Eliminando o manteniendo como respaldo? Eliminando según plan)
 export const deleteFromSheet = async (batchId, grade) => {
     const scriptUrl = await getActiveScriptUrl();
     if (!scriptUrl) return;
 
     try {
-        // We send Grade to ensure we don't delete same Batch ID from another Grade
-        // IMPORTANT: JSON.stringify drops keys with 'undefined' values. We must ensure grade is valid or null-ish but preserved if possible,
-        // but our script now REQUIRES it. If grade is missing, we shouldn't even call it, or we send a placeholder that won't match.
+        // Enviamos Grado para asegurar que no borramos el mismo ID de Lote de otro Grado
+        // IMPORTANTE: JSON.stringify descarta claves con valores 'undefined'. Debemos asegurar que grade sea válido o null-ish pero preservado si es posible,
+        // pero nuestro script ahora lo REQUIERE. Si falta grade, ni siquiera deberíamos llamarlo, o enviamos un marcador que no coincidirá.
         if (!grade) {
-             console.warn("Attempting to delete without Grade, this may be rejected by server safety check.");
+             console.warn("Intentando borrar sin Grado, esto puede ser rechazado por la verificación de seguridad del servidor.");
         }
 
         const payload = {
             action: 'delete',
             Batch: batchId,
-            Grade: grade || "" // Send empty string instead of undefined to ensure key exists
+            Grade: grade || "" // Enviar string vacío en lugar de undefined para asegurar que la clave exista
         };
 
         const response = await fetch(scriptUrl, {
@@ -332,7 +332,7 @@ export const fetchGlobalConfig = async () => {
     if (!scriptUrl) return null;
 
     try {
-        const url = `${scriptUrl}?action=getConfig`;
+        const url = `${scriptUrl}?action=getConfig&_t=${Date.now()}`;
         // console.log("Fetching config from:", url);
         const response = await fetch(url);
         // It should return { "7.00": "SAE1006", "5.50": "SAE...", ... }

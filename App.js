@@ -28,9 +28,9 @@ const AppContent = () => {
     const checkConfiguration = async () => {
         try {
             const url = await getScriptUrl();
-            // If we have URL, we check auth. 
-            // If not, we force Settings (which is accessible via Login Screen config link anyway, 
-            // but let's keep logic simple: If no user, show Login).
+            // Si tenemos URL, verificamos auth. 
+            // Si no, forzamos Configuración (que es accesible vía enlace Configuración en Login de todos modos, 
+            // pero mantengamos la lógica simple: Si no hay usuario, mostrar Login).
             if (url) {
                 setInitialRoute('Home');
             } else {
@@ -53,13 +53,13 @@ const AppContent = () => {
         <NavigationContainer>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
                 {!user ? (
-                    // Auth Stack
+                    // Pila de Autenticación
                     <>
                         <Stack.Screen name="Login" component={LoginScreen} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
                     </>
                 ) : (
-                    // App Stack
+                    // Pila de Aplicación
                     <>
                         <Stack.Screen name="Home" component={HomeScreen} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />

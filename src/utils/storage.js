@@ -1,8 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const SCRIPT_URL_KEY = 'script_url_v13'; // Bump to invalidate cache
+export const SCRIPT_URL_KEY = 'script_url_v13'; // Incrementar para invalidar caché
 export const HISTORY_KEY = "scan_history";
 export const MANUAL_DATA_KEY = 'manual_data_v2'; 
+export const PREFERRED_BROWSER_KEY = 'preferred_browser_pkg';
+
+export const savePreferredBrowser = async (pkg) => {
+    try {
+        await AsyncStorage.setItem(PREFERRED_BROWSER_KEY, pkg);
+    } catch (e) {
+        console.error("Error saving browser pref:", e);
+    }
+};
+
+export const getPreferredBrowser = async () => {
+    try {
+        return await AsyncStorage.getItem(PREFERRED_BROWSER_KEY);
+    } catch (e) {
+        return null; 
+    }
+}; 
 
 // URL por defecto (V9 - Global SAE)
 export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyNDXPZGsi4Wlx6d-9-u4xrEI6u7kJytwFQ6FcnHFgKZY-GdxR94ScAlNk9DK0ZWwtaKw/exec';
@@ -18,7 +35,7 @@ export const saveScriptUrl = async (url) => {
 export const getScriptUrl = async () => {
   try {
     const url = await AsyncStorage.getItem(SCRIPT_URL_KEY);
-    return url || null; // Return null if not set to trigger setup
+    return url || null; // Devolver null si no está configurado para disparar configuración
   } catch (e) {
     console.error("Error getting script URL:", e);
     return null;
@@ -36,7 +53,7 @@ export const saveScanToHistory = async (scanData) => {
       timestamp: new Date().toISOString(),
     };
 
-    history.unshift(newRecord); // Add to beginning
+    history.unshift(newRecord); // Agregar al principio
     await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
     return true;
   } catch (e) {

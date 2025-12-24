@@ -7,7 +7,7 @@ export default function GlobalHistoryScreen({ navigation }) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1); // Estimated
+    const [totalPages, setTotalPages] = useState(1); // Estimado
     const [totalRows, setTotalRows] = useState(0);
 
     const pageSize = 100;
@@ -24,7 +24,7 @@ export default function GlobalHistoryScreen({ navigation }) {
             setData(res.data);
             setTotalRows(res.total);
             setPage(res.page);
-            // Calculate total pages
+            // Calcular total de páginas
             const pages = Math.ceil(res.total / pageSize);
             setTotalPages(Math.max(1, pages));
         } catch (e) {
@@ -43,8 +43,8 @@ export default function GlobalHistoryScreen({ navigation }) {
     };
 
     const handleEdit = (item) => {
-        // Navigate to Manual Screen in "Remote Edit Mode"
-        // We pass 'isRemote: true' so ManualScreen knows to use updateRemoteRow
+        // Navegar a Pantalla Manual en "Modo Edición Remota"
+        // Pasamos 'isRemote: true' para que ManualScreen sepa usar updateRemoteRow
         navigation.navigate('Manual', { 
             isEditing: true, 
             isRemote: true,
@@ -66,7 +66,7 @@ export default function GlobalHistoryScreen({ navigation }) {
                         try {
                             await deleteFromSheet(item.Batch, item.Grade);
                             Alert.alert("Éxito", "Registro borrado");
-                            loadPage(page); // Reload current page
+                            loadPage(page); // Recargar página actual
                         } catch (e) {
                              Alert.alert("Error", "Falló el borrado: " + e.message);
                              setLoading(false);
@@ -156,13 +156,13 @@ export default function GlobalHistoryScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#E5E5E5', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+    container: { flex: 1, backgroundColor: '#121212', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
     header: { 
         flexDirection: 'row', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
         padding: 15, 
-        backgroundColor: '#111', 
+        backgroundColor: '#000', 
         elevation: 4,
         borderBottomWidth: 2,
         borderBottomColor: '#D32F2F'
@@ -171,11 +171,11 @@ const styles = StyleSheet.create({
     title: { fontSize: 18, fontWeight: 'bold', color: '#FFF' },
     reloadButton: { padding: 5 },
     reloadText: { fontSize: 24, color: '#FFF' },
-    summary: { padding: 10, flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#DDD', borderBottomWidth: 1, borderColor: '#BBB' },
-    summaryText: { color: '#333', fontWeight: 'bold' },
+    summary: { padding: 10, flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#2C2C2C', borderBottomWidth: 1, borderColor: '#444' },
+    summaryText: { color: '#EEE', fontWeight: 'bold' },
     list: { padding: 10 },
     card: { 
-        backgroundColor: 'white', 
+        backgroundColor: '#1E1E1E', // Dark Card
         padding: 15, 
         marginBottom: 10, 
         borderRadius: 8, 
@@ -183,18 +183,18 @@ const styles = StyleSheet.create({
         borderLeftWidth: 4,
         borderLeftColor: '#D32F2F' 
     },
-    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5, borderBottomWidth: 1, borderColor: '#eee', paddingBottom: 5 },
-    batchId: { fontWeight: 'bold', fontSize: 16, color: '#000' },
-    date: { color: '#666', fontWeight: 'bold' },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5, borderBottomWidth: 1, borderColor: '#444', paddingBottom: 5 },
+    batchId: { fontWeight: 'bold', fontSize: 16, color: '#FFF' },
+    date: { color: '#BBB', fontWeight: 'bold' },
     row: { flexDirection: 'row', marginBottom: 5 },
-    label: { fontWeight: 'bold', width: 60, color: '#444' },
-    value: { flex: 1, color: '#111' },
+    label: { fontWeight: 'bold', width: 60, color: '#AAA' },
+    value: { flex: 1, color: '#E0E0E0' },
     actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 },
     actionBtn: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 4, borderWidth: 1 },
-    editBtn: { backgroundColor: '#FFF', borderColor: '#FBC02D' }, // White with Yellow border
-    deleteBtn: { backgroundColor: '#FFF', borderColor: '#D32F2F' }, // White with Red border
-    actionText: { color: '#333', fontWeight: 'bold', fontSize: 12 }, // Or specific colors for text
-    footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#111', elevation: 5, borderTopWidth: 2, borderTopColor: '#D32F2F' },
+    editBtn: { backgroundColor: '#333', borderColor: '#FBC02D' }, // Dark with Yellow border
+    deleteBtn: { backgroundColor: '#333', borderColor: '#D32F2F' }, // Dark with Red border
+    actionText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 }, 
+    footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#000', elevation: 5, borderTopWidth: 2, borderTopColor: '#D32F2F' },
     navBtn: { padding: 10, backgroundColor: '#333', borderRadius: 4, borderWidth: 1, borderColor: '#555' },
     disabled: { backgroundColor: '#222', opacity: 0.5 },
     navText: { color: 'white', fontWeight: 'bold' },

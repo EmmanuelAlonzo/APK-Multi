@@ -7,8 +7,8 @@ import { fetchBulkData, getNextBatchSequence, fetchExternalBulkData } from '../u
 
 export default function BulkScreen({ navigation }) {
     
-    const [filterGrade, setFilterGrade] = useState(''); // NEW: Filter by Grade
-    const [externalUrl, setExternalUrl] = useState(''); // NEW: External URL state
+    const [filterGrade, setFilterGrade] = useState(''); // NUEVO: Filtrar por Grado
+    const [externalUrl, setExternalUrl] = useState(''); // NUEVO: Estado de URL externa
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState('');
 
@@ -52,10 +52,10 @@ export default function BulkScreen({ navigation }) {
             // However, script does simple clean.
             // Adjust logic below to use 'rows' directly.
 
-            // FILTERING LOGIC
-            // let rows = parsed.data; // This line is now redundant as 'rows' is already the parsed data.
+            // LÓGICA DE FILTRADO
+            // let rows = parsed.data; // Esta línea es redundante ya que 'rows' es la data analizada.
 
-            // NEW: Constraints (1. Filter Required if size >= 10, 2. Exception for small batches)
+            // NUEVO: Restricciones (1. Filtro Requerido si tamaño >= 10, 2. Excepción para lotes pequeños)
             if (!filterGrade) {
                 if (rows.length >= 10) {
                     Alert.alert(
@@ -109,7 +109,7 @@ export default function BulkScreen({ navigation }) {
                     HeatNo: getCol('HeatNo') || getCol('Colada') || '',
                     BundleNo: getCol('BundleNo') || '',
                     Weight: getCol('Weight') || getCol('Peso') || '0',
-                    // NEW: Extract Batch directly from Sheet
+                    // NUEVO: Extraer Lote directamente de la Hoja
                     ExistingBatch: getCol('Batch') || getCol('Lote') || ''
                 };
 
@@ -123,11 +123,11 @@ export default function BulkScreen({ navigation }) {
                 
                 let batch = '';
 
-                // STRATEGY: Use Existing Batch if Available (Recommended)
+                // ESTRATEGIA: Usar Lote Existente si Disponible (Recomendado)
                 if (data.ExistingBatch) {
                     batch = data.ExistingBatch;
                 } else {
-                    // Fallback: Generate Sequence Logic
+                    // Respaldo: Lógica de Generación de Secuencia
                     if (!sequenceMap[normGrade]) {
                         try {
                             const seqData = await getNextBatchSequence(normGrade);
@@ -159,7 +159,7 @@ export default function BulkScreen({ navigation }) {
                     batch = `${sequenceMap[normGrade].dateStr}I${sequenceMap[normGrade].seq.toString().padStart(3, '0')}`;
                 }
                 
-                // SKU Logic (Updated from Image)
+                // Lógica de SKU (Actualizada desde Imagen)
                 const SKU_MAP = {
                     "5.50": "10000241", 
                     "6.00": "10000285", 
@@ -212,7 +212,7 @@ export default function BulkScreen({ navigation }) {
 
             <View style={styles.content}>
                 
-                {/* Global Grade Filter */}
+                {/* Filtro Global de Grado */}
                 <Text style={styles.label}>Filtrar por Grado/Medida:</Text>
                 <View style={styles.gradeContainer}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -415,12 +415,12 @@ const generateHtml = (rows) => {
 const styles = StyleSheet.create({
     container: { 
         flex: 1, 
-        backgroundColor: '#E5E5E5', // Grey
+        backgroundColor: '#121212', // Dark Background
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     header: { 
         padding: 20, 
-        backgroundColor: '#111', // Black
+        backgroundColor: '#000', // Black
         flexDirection: 'row', 
         alignItems: 'center',
         elevation: 4,
@@ -431,18 +431,18 @@ const styles = StyleSheet.create({
     backText: { fontSize: 16, color: '#DDD' },
     title: { fontSize: 20, fontWeight: 'bold', color: '#FFF' },
     content: { padding: 20 },
-    label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#111' },
+    label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#E0E0E0' },
     input: { 
         borderWidth: 1, 
-        borderColor: '#ccc', 
+        borderColor: '#444', 
         borderRadius: 8, 
         padding: 12, 
         marginBottom: 20, 
-        color: '#000', 
-        backgroundColor: '#fff' 
+        color: '#FFF', 
+        backgroundColor: '#2C2C2C' // Dark Input
     },
     button: { 
-        backgroundColor: '#111', 
+        backgroundColor: '#000', 
         padding: 15, 
         borderRadius: 8, 
         alignItems: 'center',
@@ -453,27 +453,32 @@ const styles = StyleSheet.create({
     buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
     gradeContainer: { flexDirection: 'row', marginBottom: 20, height: 50 },
     gradeButton: { 
-        backgroundColor: '#D0D0D0', 
+        backgroundColor: '#333', 
         paddingHorizontal: 15, 
         paddingVertical: 10, 
         borderRadius: 20, 
-        marginRight: 10, 
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#555'
     },
-    gradeButtonSelected: { backgroundColor: '#D32F2F' },
-    gradeButtonText: { fontSize: 16, color: '#333' },
+    gradeButtonSelected: { 
+        backgroundColor: '#D32F2F',
+        borderColor: '#D32F2F'
+    },
+    gradeButtonText: { fontSize: 16, color: '#DDD' },
     gradeButtonTextSelected: { color: 'white', fontWeight: 'bold' },
-    status: { textAlign: 'center', marginBottom: 10, color: '#111' },
+    status: { textAlign: 'center', marginBottom: 10, color: '#BBB' },
     disabled: { opacity: 0.7 },
     externalSection: {
         marginBottom: 20,
-        backgroundColor: '#FFF',
+        backgroundColor: '#1E1E1E', // Dark Card
         padding: 15,
         borderRadius: 8,
         elevation: 2
     },
     divider: {
         height: 1,
-        backgroundColor: '#CCC',
+        backgroundColor: '#444',
         marginVertical: 20,
     },
     sectionTitle: {
@@ -483,13 +488,8 @@ const styles = StyleSheet.create({
         color: '#D32F2F',
     },
     externalButton: {
-        backgroundColor: '#111', 
-        borderColor: '#FFF', // or keep red?
-        borderWidth: 0,
-        // Make green if specific? User said "Red/White/Black/Grey" primarily.
-        // Let's stick to theme or keep logic color.
-        // If imports from sheet, maybe a different shade?
-        // Let's use Dark Grey for secondary action
-        backgroundColor: '#333'
+        backgroundColor: '#333', 
+        borderColor: '#555',
+        borderWidth: 1
     }
 });
