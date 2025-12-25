@@ -206,7 +206,7 @@ export default function ScannerScreen({ navigation }) {
                                     setScanned(false);
                                 }}
                             >
-                                <Text style={[styles.textStyle, { color: '#333' }]}>Cancelar</Text>
+                                <Text style={[styles.textStyle, { color: '#FFF' }]}>Cancelar</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -337,18 +337,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         marginBottom: 10,
         borderBottomWidth: 1,
-        borderColor: '#eee',
+        borderColor: '#444', // Darker border
         paddingBottom: 4
     },
     label: {
         width: 80,
         fontWeight: 'bold',
-        color: '#555'
+        color: '#AAA' // Light Grey Label
     },
     value: {
         flex: 1,
         fontWeight: 'bold',
-        color: '#000',
+        color: '#FFF', // White Value
         fontSize: 16
     }
 });

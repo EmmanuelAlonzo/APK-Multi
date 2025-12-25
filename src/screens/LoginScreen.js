@@ -1,9 +1,8 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator, Platform, StatusBar } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator, Platform, StatusBar, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
-import { getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage';
-import { Picker } from '@react-native-picker/picker';
+import { getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage'; 
 
 export default function LoginScreen({ navigation }) {
     const { userList, loadingUsers, refreshUsers, login, error } = useContext(AuthContext);
@@ -11,6 +10,7 @@ export default function LoginScreen({ navigation }) {
     const [selectedUser, setSelectedUser] = useState(null);
     const [pin, setPin] = useState('');
     const [verifying, setVerifying] = useState(false);
+    const [modalVisible, setModalVisible] = useState(false);
 
     useEffect(() => {
         // Auto-actualizar usuarios al montar si está vacío
@@ -87,16 +87,49 @@ export default function LoginScreen({ navigation }) {
                             <>
                                 <Text style={styles.label}>Selecciona tu Usuario:</Text>
                                 <View style={styles.pickerContainer}>
-                                    <Picker
-                                        selectedValue={selectedUser}
-                                        onValueChange={(itemValue) => setSelectedUser(itemValue)}
-                                        dropdownIconColor="#000000"
-                                        style={{ color: '#000000' }}
+                                    <TouchableOpacity 
+                                        style={styles.pickerButton} 
+                                        onPress={() => setModalVisible(true)}
                                     >
-                                        {userList.map((u, index) => (
-                                            <Picker.Item key={index} label={u.name} value={u} color="#000000" />
-                                        ))}
-                                    </Picker>
+                                        <Text style={styles.pickerButtonText}>
+                                            {selectedUser ? selectedUser.name : "Seleccionar..."}
+                                        </Text>
+                                        <Text style={styles.pickerIcon}>▼</Text>
+                                    </TouchableOpacity>
+
+                                    <Modal
+                                        animationType="fade"
+                                        transparent={true}
+                                        visible={modalVisible}
+                                        onRequestClose={() => setModalVisible(false)}
+                                    >
+                                        <View style={styles.modalOverlay}>
+                                            <View style={styles.modalContent}>
+                                                <Text style={styles.modalTitle}>Seleccionar Usuario</Text>
+                                                <FlatList
+                                                    data={userList}
+                                                    keyExtractor={(item, index) => index.toString()}
+                                                    renderItem={({ item }) => (
+                                                        <TouchableOpacity 
+                                                            style={styles.modalItem}
+                                                            onPress={() => {
+                                                                setSelectedUser(item);
+                                                                setModalVisible(false);
+                                                            }}
+                                                        >
+                                                            <Text style={styles.modalItemText}>{item.name}</Text>
+                                                        </TouchableOpacity>
+                                                    )}
+                                                />
+                                                <TouchableOpacity 
+                                                    style={styles.modalCloseButton} 
+                                                    onPress={() => setModalVisible(false)}
+                                                >
+                                                    <Text style={styles.modalCloseText}>Cerrar</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </Modal>
                                 </View>
 
                                 <Text style={styles.label}>PIN de Acceso:</Text>
@@ -135,7 +168,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#E5E5E5', // Gris Concreto
+        backgroundColor: '#121212', // Dark Background
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     content: {
@@ -155,20 +188,20 @@ const styles = StyleSheet.create({
     appName: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#D32F2F', // Rojo Corporativo para Título
+        color: '#D32F2F', 
         letterSpacing: 1,
     },
     version: {
-        color: '#666',
+        color: '#888',
         fontSize: 12,
     },
     formContainer: {
-        backgroundColor: '#FFFFFF', // Formulario Blanco en Fondo Gris
+        backgroundColor: '#1E1E1E', // Dark Card
         padding: 20,
         borderRadius: 8,
         elevation: 4,
         borderTopWidth: 5,
-        borderTopColor: '#D32F2F' // Acento rojo superior
+        borderTopColor: '#D32F2F' 
     },
     loadingContainer: {
         alignItems: 'center',
@@ -176,40 +209,100 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         marginTop: 10,
-        color: '#333',
+        color: '#DDD',
     },
     label: {
         fontSize: 16,
         fontWeight: 'bold',
         marginBottom: 8,
-        color: '#111', // Texto Negro
+        color: '#E0E0E0', // Light Text
     },
     pickerContainer: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 8,
         marginBottom: 20,
-        backgroundColor: '#F9F9F9',
+    },
+    pickerButton: {
+        backgroundColor: '#2C2C2C',
+        borderWidth: 1,
+        borderColor: '#444',
+        borderRadius: 8,
+        padding: 15,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    pickerButtonText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: 'bold'
+    },
+    pickerIcon: {
+        color: '#D32F2F',
+        fontSize: 16,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        backgroundColor: '#1E1E1E',
+        borderRadius: 10,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: '#D32F2F',
+        maxHeight: '80%',
+    },
+    modalTitle: {
+        color: '#D32F2F',
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 15,
+        textAlign: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: '#444',
+        paddingBottom: 10
+    },
+    modalItem: {
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#333'
+    },
+    modalItemText: {
+        color: '#FFF',
+        fontSize: 16,
+        textAlign: 'center'
+    },
+    modalCloseButton: {
+        marginTop: 20,
+        padding: 15,
+        backgroundColor: '#333',
+        borderRadius: 8,
+        alignItems: 'center'
+    },
+    modalCloseText: {
+        color: '#FFF',
+        fontWeight: 'bold'
     },
     input: {
-        backgroundColor: '#F9F9F9',
-        borderWidth: 1,
-        borderColor: '#ccc',
+        backgroundColor: '#2C2C2C', // Same as Picker
+        borderWidth: 1,             // Same as Picker
+        borderColor: '#444',        // Same as Picker
         borderRadius: 8,
         padding: 12,
         fontSize: 18,
         textAlign: 'center',
         marginBottom: 20,
         letterSpacing: 5,
-        color: '#000',
+        color: '#FFFFFF', 
     },
     loginButton: {
-        backgroundColor: '#111', // Botón Negro
+        backgroundColor: '#D32F2F', // Red Background (Visible)
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#D32F2F' // Borde Rojo
+        borderColor: '#B71C1C' 
     },
     loginButtonText: {
         color: 'white',
@@ -236,23 +329,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     refreshText: {
-        color: '#666',
-        fontSize: 12,
+        color: '#CCCCCC', // Light Text
+        fontSize: 14,
+        textDecorationLine: 'underline'
     },
     configLink: {
         marginTop: 20,
         alignItems: 'center',
     },
     configText: {
-        color: '#666',
+        color: '#AAAAAA', // Light Grey
         textDecorationLine: 'underline',
     },
-    footer: {
-        padding: 20,
-        alignItems: 'center',
-    },
     footerLink: {
-        color: '#888',
+        color: '#666',
         fontSize: 12,
     }
 });
