@@ -12,7 +12,7 @@ export default function HistoryScreen({ navigation }) {
 
     // Roles
     const role = user?.role?.toLowerCase() || 'auxiliar';
-    const canEdit = ['administrador', 'supervisor', 'verificador'].includes(role);
+    const canEdit = ['administrador', 'supervisor', 'verificador', 'auxiliar'].includes(role);
     const canClearAll = role === 'administrador'; 
     // Todos pueden borrar ítems individuales a petición
 

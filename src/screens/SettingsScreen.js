@@ -91,7 +91,7 @@ export default function SettingsScreen({ navigation, route }) {
                 <View style={styles.infoBox}>
                     <Text style={styles.label}>Estado de Conexión:</Text>
                     <Text style={styles.description}>
-                        Conectado a Google Apps Script (V9 - Global SAE)
+                        Conectado a Google Apps Script (V10 - Edición Remota + ID Único)
                     </Text>
                     <Text style={[styles.description, {fontSize: 10}]}>{url}</Text>
                 </View>

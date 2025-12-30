@@ -36,14 +36,18 @@ export const parseSteelLabel = (rawData) => {
         const num = parseFloat(token);
         const isNum = !isNaN(num);
         const upperToken = token.toUpperCase();
-        
+        let usedForGrade = false;
+
         // --- DETECTAR GRADO ---
         // (Igual que antes: 5.0 - 16.0)
         if (isNum && num >= 5.0 && num <= 16.0) {
             // Evitar confundir con, por ejemplo, el mes "06" de una fecha.
             // Generalmente el grado tiene decimales o es un entero aislado.
             // Si ya tenemos grado, no sobrescribimos tan fácil.
-            if (!result.grade) result.grade = normalizeGrade(token);
+            if (!result.grade) {
+                result.grade = normalizeGrade(token);
+                usedForGrade = true;
+            }
         }
 
         // --- DETECTAR PESO ---
@@ -69,7 +73,7 @@ export const parseSteelLabel = (rawData) => {
              const digits = token.replace(/[^0-9]/g, "").length;
              const total = token.length;
              const isDate = (token.match(/-/g) || []).length >= 2;
-            
+             
              if (!isDate && digits > 0) {
                  const digitRatio = digits / total;
                  if (digitRatio > 0.4) {
@@ -97,11 +101,17 @@ export const parseSteelLabel = (rawData) => {
                  // Candidato fuerte a Rollo (ej. 28, 150)
                  if (!result.bundle) result.bundle = num.toString();
              } else {
-                 // Es ambiguo (ej. 10). Podría ser Grado 10mm o Rollo 10.
-                 // Si ya tenemos grado y es diferente, podría ser rollo.
-                 // O si tiene ceros a la izquierda en texto crudo (006) -> Rollo.
+                 // Es ambiguo (ej. 10, 7, 5.5). Podría ser Grado 10mm o Rollo 10.
+                 
+                 // CRITERIO MEJORADO:
+                 // 1. Si tiene ceros a la izquierda (007, 07), es Rollo.
+                 // 2. Si ya tenemos Grado (y este token NO se usó para Grado), y no tiene decimales "." (es entero puro style), es Rollo.
+                 
                  if (token.startsWith('0') && token.length > 1) {
                      result.bundle = num.toString();
+                 } else if (result.grade && !usedForGrade && !token.includes('.')) {
+                     // Ejemplo: grade="7.00" ya detectado. Token actual="7".
+                     if (!result.bundle) result.bundle = num.toString();
                  }
              }
         }

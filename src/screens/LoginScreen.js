@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator, Platform, StatusBar, Modal, FlatList } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator, Platform, StatusBar, Modal, FlatList, ScrollView, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 import { getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage'; 
@@ -37,7 +37,6 @@ export default function LoginScreen({ navigation }) {
         }
 
         setVerifying(true);
-        setVerifying(true);
         // ¿Simular pequeño retraso para UX? No es necesario.
         const success = login(selectedUser, pin);
         setVerifying(false);
@@ -56,111 +55,116 @@ export default function LoginScreen({ navigation }) {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
-                <View style={styles.logoContainer}>
-                    <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
-                    <Text style={styles.appName}>Control de MP</Text>
-                    <Text style={styles.version}>v1.0.3</Text>
-                </View>
-
-                {loadingUsers ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color="#2196F3" />
-                        <Text style={styles.loadingText}>Cargando usuarios...</Text>
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                style={{ flex: 1 }}
+            >
+                <ScrollView contentContainerStyle={styles.content}>
+                    <View style={styles.logoContainer}>
+                        <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
+                        <Text style={styles.appName}>Control de MP</Text>
+                        <Text style={styles.version}>v1.0.3</Text>
                     </View>
-                ) : (
-                    <View style={styles.formContainer}>
-                        
-                        {userList.length === 0 ? (
-                            <View>
-                                <Text style={styles.errorText}>
-                                    {error ? `Error: ${error}` : "No se encontraron usuarios."}
-                                </Text>
-                                <TouchableOpacity style={styles.retryButton} onPress={refreshUsers}>
-                                    <Text style={styles.retryText}>Reintentar</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.configLink} onPress={() => navigation.navigate('Settings')}>
-                                    <Text style={styles.configText}>Ir a Configuración</Text>
-                                </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <>
-                                <Text style={styles.label}>Selecciona tu Usuario:</Text>
-                                <View style={styles.pickerContainer}>
-                                    <TouchableOpacity 
-                                        style={styles.pickerButton} 
-                                        onPress={() => setModalVisible(true)}
-                                    >
-                                        <Text style={styles.pickerButtonText}>
-                                            {selectedUser ? selectedUser.name : "Seleccionar..."}
-                                        </Text>
-                                        <Text style={styles.pickerIcon}>▼</Text>
+
+                    {loadingUsers ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color="#2196F3" />
+                            <Text style={styles.loadingText}>Cargando usuarios...</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.formContainer}>
+                            
+                            {userList.length === 0 ? (
+                                <View>
+                                    <Text style={styles.errorText}>
+                                        {error ? `Error: ${error}` : "No se encontraron usuarios."}
+                                    </Text>
+                                    <TouchableOpacity style={styles.retryButton} onPress={refreshUsers}>
+                                        <Text style={styles.retryText}>Reintentar</Text>
                                     </TouchableOpacity>
-
-                                    <Modal
-                                        animationType="fade"
-                                        transparent={true}
-                                        visible={modalVisible}
-                                        onRequestClose={() => setModalVisible(false)}
-                                    >
-                                        <View style={styles.modalOverlay}>
-                                            <View style={styles.modalContent}>
-                                                <Text style={styles.modalTitle}>Seleccionar Usuario</Text>
-                                                <FlatList
-                                                    data={userList}
-                                                    keyExtractor={(item, index) => index.toString()}
-                                                    renderItem={({ item }) => (
-                                                        <TouchableOpacity 
-                                                            style={styles.modalItem}
-                                                            onPress={() => {
-                                                                setSelectedUser(item);
-                                                                setModalVisible(false);
-                                                            }}
-                                                        >
-                                                            <Text style={styles.modalItemText}>{item.name}</Text>
-                                                        </TouchableOpacity>
-                                                    )}
-                                                />
-                                                <TouchableOpacity 
-                                                    style={styles.modalCloseButton} 
-                                                    onPress={() => setModalVisible(false)}
-                                                >
-                                                    <Text style={styles.modalCloseText}>Cerrar</Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                        </View>
-                                    </Modal>
+                                    <TouchableOpacity style={styles.configLink} onPress={() => navigation.navigate('Settings')}>
+                                        <Text style={styles.configText}>Ir a Configuración</Text>
+                                    </TouchableOpacity>
                                 </View>
+                            ) : (
+                                <>
+                                    <Text style={styles.label}>Selecciona tu Usuario:</Text>
+                                    <View style={styles.pickerContainer}>
+                                        <TouchableOpacity 
+                                            style={styles.pickerButton} 
+                                            onPress={() => setModalVisible(true)}
+                                        >
+                                            <Text style={styles.pickerButtonText}>
+                                                {selectedUser ? selectedUser.name : "Seleccionar..."}
+                                            </Text>
+                                            <Text style={styles.pickerIcon}>▼</Text>
+                                        </TouchableOpacity>
 
-                                <Text style={styles.label}>PIN de Acceso:</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={pin}
-                                    onChangeText={setPin}
-                                    placeholder="Ingrese PIN"
-                                    placeholderTextColor="#888"
-                                    keyboardType="numeric"
-                                    secureTextEntry
-                                    maxLength={4}
-                                />
+                                        <Modal
+                                            animationType="fade"
+                                            transparent={true}
+                                            visible={modalVisible}
+                                            onRequestClose={() => setModalVisible(false)}
+                                        >
+                                            <View style={styles.modalOverlay}>
+                                                <View style={styles.modalContent}>
+                                                    <Text style={styles.modalTitle}>Seleccionar Usuario</Text>
+                                                    <FlatList
+                                                        data={userList}
+                                                        keyExtractor={(item, index) => index.toString()}
+                                                        renderItem={({ item }) => (
+                                                            <TouchableOpacity 
+                                                                style={styles.modalItem}
+                                                                onPress={() => {
+                                                                    setSelectedUser(item);
+                                                                    setModalVisible(false);
+                                                                }}
+                                                            >
+                                                                <Text style={styles.modalItemText}>{item.name}</Text>
+                                                            </TouchableOpacity>
+                                                        )}
+                                                    />
+                                                    <TouchableOpacity 
+                                                        style={styles.modalCloseButton} 
+                                                        onPress={() => setModalVisible(false)}
+                                                    >
+                                                        <Text style={styles.modalCloseText}>Cerrar</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        </Modal>
+                                    </View>
 
-                                <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-                                    <Text style={styles.loginButtonText}>{verifying ? "Verificando..." : "INGRESAR"}</Text>
-                                </TouchableOpacity>
-                                
-                                <TouchableOpacity style={styles.refreshLink} onPress={refreshUsers}>
-                                    <Text style={styles.refreshText}>Actualizar lista de usuarios</Text>
-                                </TouchableOpacity>
-                            </>
-                        )}
+                                    <Text style={styles.label}>PIN de Acceso:</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={pin}
+                                        onChangeText={setPin}
+                                        placeholder="Ingrese PIN"
+                                        placeholderTextColor="#888"
+                                        keyboardType="numeric"
+                                        secureTextEntry
+                                        maxLength={4}
+                                    />
+
+                                    <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+                                        <Text style={styles.loginButtonText}>{verifying ? "Verificando..." : "INGRESAR"}</Text>
+                                    </TouchableOpacity>
+                                    
+                                    <TouchableOpacity style={styles.refreshLink} onPress={refreshUsers}>
+                                        <Text style={styles.refreshText}>Actualizar lista de usuarios</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
+                        </View>
+                    )}
+                    <View style={styles.footer}>
+                        <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+                            <Text style={styles.footerLink}>Configuración de Conexión</Text>
+                        </TouchableOpacity>
                     </View>
-                )}
-            </View>
-            <View style={styles.footer}>
-                <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-                    <Text style={styles.footerLink}>Configuración de Conexión</Text>
-                </TouchableOpacity>
-            </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }

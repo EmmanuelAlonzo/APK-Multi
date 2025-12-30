@@ -148,6 +148,7 @@ export const fetchPaginatedData = async (page = 1, pageSize = 100) => {
                     BundleNo: findVal(/(bundle|bundleno|coil|rollo|paquete|bobina)/i) || '',
                     Weight: findVal(/(weight|peso)/i) || 0,
                     Date: findVal(/(date|fecha)/i) || '',
+                    UniqueId: findVal(/(uniqueid|uuid|uid|id_unico)/i) || '',
                     ...item // Mantener claves originales
                 };
             });
@@ -166,7 +167,8 @@ export const updateRemoteRow = async (batchId, updateData) => {
 
     try {
         const url = `${scriptUrl}?action=updateRow`;
-        const payload = { ...updateData, Batch: batchId };
+        // IMPORTANTE: Enviar 'action' también en el body para que doPost lo lea correctamente y no caiga en el default (saveData)
+        const payload = { ...updateData, Batch: batchId, action: 'updateRow' };
         
         const response = await fetch(url, {
             method: 'POST',
@@ -174,9 +176,16 @@ export const updateRemoteRow = async (batchId, updateData) => {
         });
         
         if (!response.ok) throw new Error('Network response was not ok');
-        const json = await response.json();
-        if (json.error) throw new Error(json.error);
-        return json;
+        
+        const text = await response.text();
+        console.log("Remote Update Response:", text);
+
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            // Si el servidor devuelve texto plano (ej. "Success" o "Row updated")
+            return { result: text }; 
+        }
     } catch (e) {
         console.error("Remote Update Error:", e);
         throw e;
@@ -320,7 +329,13 @@ export const updateSheetRow = async (data) => {
         
         const text = await response.text();
         console.log("Update sheet response:", text);
-        return text;
+
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            // Si devuelve texto simple (Success), devolverlo tal cual
+            return text;
+        }
     } catch (error) {
         console.error("Error updating sheet:", error);
         throw error;

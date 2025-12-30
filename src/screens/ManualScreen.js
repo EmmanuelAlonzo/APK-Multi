@@ -19,6 +19,9 @@ import {
   getManualData,
   getLocalSequence,
   saveLocalSequence,
+  updateHistoryItemByBatchId,
+  getDailyEditCount,
+  incrementDailyEditCount,
 } from "../utils/storage";
 import { getNextBatchSequence, sendDataToSheet, fetchLastBatch, updateRemoteRow } from "../utils/api";
 import { AuthContext } from "../context/AuthContext";
@@ -41,7 +44,7 @@ export default function ManualScreen({ navigation, route }) {
   const [heat, setHeat] = useState(isEditing ? String(item.HeatNo || "") : "");
   const [bundle, setBundle] = useState(isEditing ? String(item.BundleNo || item.Coil || item.coil || "") : "");
   const [weight, setWeight] = useState(isEditing ? String(item.Weight || "") : "");
-  // Corrección: usar fecha local en lugar de UTC para evitar saltos de fecha en la tarde
+
   const getLocalDate = () => {
       const now = new Date();
       const Y = now.getFullYear();
@@ -49,8 +52,14 @@ export default function ManualScreen({ navigation, route }) {
       const D = now.getDate().toString().padStart(2, '0');
       return `${Y}-${M}-${D}`;
   };
-
-  const [dateStr, setDateStr] = useState(isEditing ? item.Date : getLocalDate());
+  // Robust initialization for Date
+  const getInitialDate = () => {
+       if (isEditing) {
+           return item.Date || item.date || item.fecha || getLocalDate();
+       }
+       return getLocalDate();
+  };
+  const [dateStr, setDateStr] = useState(getInitialDate());
   
   const [loading, setLoading] = useState(false);
   const [prefetchedSeq, setPrefetchedSeq] = useState(null);
@@ -264,35 +273,102 @@ export default function ManualScreen({ navigation, route }) {
 
       // --- MODO EDICIÓN ---
       if (isEditing) {
-          const updateData = {
-              Batch: batchId, // Clave
+          // [NUEVO] LIMITE PARA AUXILIARES
+          if (user && (user.role === 'auxiliar' || user.role === 'Auxiliar')) {
+               const currentCount = await getDailyEditCount();
+               if (currentCount >= 10) {
+                   Alert.alert("Límite Alcanzado", "Has alcanzado el límite de 10 ediciones diarias para Auxiliares.");
+                   setLoading(false);
+                   return;
+               }
+          }
+
+          // 1. Datos para Historial Local (Solo claves limpias / Inglés)
+          const localData = {
+              Batch: batchId.trim(),
               SAE: sae,
               HeatNo: heat,
               BundleNo: bundle,
               Weight: weight,
-              // Grado, Fecha usualmente no editables fácilmente ya que definen el ID del Lote, pero permitimos que pasen
-              // ¿Si Admin cambia Grado, ID de Lote no coincide lógicamente? 
-              // Requisito de usuario: "Editar los registros...". 
-              // Por simplicidad, actualizamos campos en el ID de Lote EXISTENTE. Cambiar ID de Lote es peligroso.
+              Date: dateStr,
+              Grade: grade,
+              Operator: user ? user.name : (item.Operator || "Unknown"),
+              UniqueId: item.UniqueId || item.uniqueId || item.uid,
+          };
+
+          // 2. Datos para Google Sheet (Incluye Alias en Español)
+          const sheetPayload = {
+              ...localData,
+              "Batch ID": batchId.trim(), Lote: batchId.trim(),
+              "Heat No": heat, Colada: heat,
+              "Bundle No": bundle, Coil: bundle,
+              Peso: weight,
+              "Fecha": dateStr,
+              Grado: grade,
+              Usuario: localData.Operator
           };
 
           if (route.params?.isRemote) {
-              await updateRemoteRow(batchId, updateData);
-              Alert.alert("Éxito", "Registro actualizado remotamente");
-              navigation.goBack();
+              console.log("Enviando actualización remota:", JSON.stringify(sheetPayload));
+              const response = await updateRemoteRow(batchId, sheetPayload);
+              console.log("Respuesta servidor:", response);
+
+              if (response && response.success) {
+                   // [NUEVO] INCREMENTAR CONTADOR
+                   if (user && (user.role === 'auxiliar' || user.role === 'Auxiliar')) await incrementDailyEditCount();
+
+                  Alert.alert("Éxito", "Registro actualizado remotamente");
+                  navigation.goBack();
+              } else {
+                  const msg = response?.error || "Error desconocido al actualizar";
+                  Alert.alert("Error Remoto", msg);
+              }
               return;
           }
 
-          // Actualizar Hoja (Edición Local)
-          await updateSheetRow(updateData);
-          
-          // Actualizar Historial (Local) requiere modificar el ítem en almacenamiento
-          // No podemos modificar fácilmente un ítem en lista historial desde aquí sin acción global de store o re-lectura.
-          // TRUCO: No actualizaremos historial local aquí, PERO `HistoryScreen` usualmente recarga. 
-          // Sin embargo, para ser amables, deberíamos intentar. 
-          // Por ahora, solo alertar y volver.
-          Alert.alert("Éxito", "Registro actualizado");
-          navigation.goBack();
+          // --- EDICIÓN LOCAL ---
+          console.log("Enviando actualización hoja:", JSON.stringify(sheetPayload));
+          // Actualizar Hoja
+          const sheetResponse = await updateSheetRow(sheetPayload);
+          console.log("Respuesta hoja:", sheetResponse);
+
+          // Actualizar Historial Local
+          await updateHistoryItemByBatchId(batchId, localData);
+
+          // Validar respuesta de hoja (RESTAURADO)
+          let successSheet = false;
+          if (sheetResponse && typeof sheetResponse === 'object' && sheetResponse.success) {
+              successSheet = true;
+          } else if (typeof sheetResponse === 'string' && (sheetResponse === 'Success' || sheetResponse.includes('updated'))) {
+               successSheet = true;
+          }
+
+          if (!successSheet) {
+               // Extracción de mensaje de error
+               let errorMsg = "Respuesta desconocida del servidor";
+               if (sheetResponse && typeof sheetResponse === 'object') {
+                   errorMsg = sheetResponse.error || JSON.stringify(sheetResponse);
+               } else if (typeof sheetResponse === 'string') {
+                   errorMsg = sheetResponse.substring(0, 200); 
+               }
+               
+               Alert.alert(
+                   "Guardado Parcial (Local)", 
+                   "Se actualizó en su dispositivo, pero NO en Google Sheets.\n\nError: " + errorMsg,
+                   [{ text: "Entendido", onPress: () => navigation.goBack() }]
+               );
+          } else {
+               // [NUEVO] INCREMENTAR CONTADOR
+               if (user && (user.role === 'auxiliar' || user.role === 'Auxiliar')) await incrementDailyEditCount();
+
+
+               Alert.alert(
+                   "Éxito", 
+                   "Registro actualizado correctamente.",
+                   [{ text: "OK", onPress: () => navigation.goBack() }]
+               );
+
+          }
           return;
       }
 
@@ -313,7 +389,13 @@ export default function ManualScreen({ navigation, route }) {
       if (prefetchedSeq) {
           seqData = prefetchedSeq;
       } else {
-           seqData = await getNextBatchSequence(grade, dateObj);
+           // [MODO HÍBRIDO] Seguridad: Verificar secuencia en servidor antes de guardar.
+           try {
+               seqData = await getNextBatchSequence(grade, dateObj); 
+           } catch (e) {
+               console.warn("Falló verificación secuencia, usando local:", e);
+               seqData = null;
+           }
       }
 
       const localSeq = await getLocalSequence(storageKey);
@@ -328,19 +410,32 @@ export default function ManualScreen({ navigation, route }) {
 
       let prefix = seqData && seqData.dateStr ? seqData.dateStr : localDateStr;
 
-      // Manejar Cambio de Fecha (si servidor avanzó la fecha)
+      // [CORRECCIÓN LÓGICA FECHA]
+      // Solo cambiar fecha automáticamente si hubo desbordamiento (secuencia > 999)
+      // O si el servidor explícitamente nos dió una fecha nueva Y reinició la secuencia.
+      
       let finalDateToSave = dateStr;
-      if (prefix !== localDateStr) {
-           // Parsear YYMMDD a YYYY-MM-DD
-           const yy = prefix.substring(0, 2);
-           const mm = prefix.substring(2, 4);
-           const dd = prefix.substring(4, 6);
-           finalDateToSave = `20${yy}-${mm}-${dd}`;
-           Alert.alert("Aviso", `Secuencia llena. Se cambió la fecha a ${finalDateToSave}.`);
+      
+      const serverDateDiffers = prefix !== localDateStr;
+      
+      // CHEQUEO CRÍTICO: ¿El servidor nos está forzando un Rollover?
+      // Si la fecha cambia y la secuencia es muy baja (<= 5), asumimos rollover/nuevo día.
+      
+      if (serverDateDiffers && seqToUse <= 5) { 
+            // Aceptar nueva fecha por Overflow / Rollover
+            const yy = prefix.substring(0, 2);
+            const mm = prefix.substring(2, 4);
+            const dd = prefix.substring(4, 6);
+            finalDateToSave = `20${yy}-${mm}-${dd}`;
+            Alert.alert("Aviso", `Lote lleno o nuevo día. Fecha ajustada a ${finalDateToSave}.`);
+      } else {
+            // MANTENER FECHA MANUAL
+            // Ignoramos sugerencia de servidor si no es un rollover crítico.
+             prefix = localDateStr;
       }
 
       // Verificar desbordamiento (comprobación de cordura)
-      if (seqToUse > 999) { Alert.alert("Error", "Secuencia > 999"); setLoading(false); return; }
+      if (seqToUse > 999) { Alert.alert("Error", "Secuencia llena (999). Debe avanzar fecha."); setLoading(false); return; }
 
       const s = seqToUse.toString().padStart(3, "0");
       batchId = `${prefix}I${s}`;
@@ -355,13 +450,10 @@ export default function ManualScreen({ navigation, route }) {
       // 3. Guardar
       await saveScanToHistory(dataToSave);
       
-      // Esperar sincronización hoja para asegurar datos en servidor antes de pedir potencialmente la siguiente secuencia
-      try {
-          await sendDataToSheet(dataToSave);
-      } catch (e) {
-          console.error("Sheet Sync Error:", e);
-          Alert.alert("Advertencia", "Se guardó localmente pero falló el envío a la hoja de cálculo.");
-      }
+      // [OPTIMIZACIÓN] Enviar a Hoja en SEGUNDO PLANO (Fire & Forget)
+      sendDataToSheet(dataToSave).catch(e => {
+          console.error("Background Sheet Sync Error:", e);
+      });
 
       const newSaeMap = { ...saeMap, [grade]: sae };
       const newLastBatchMap = { ...lastBatchMap, [grade]: batchId }; // Actualizar mapa de lotes
@@ -372,7 +464,7 @@ export default function ManualScreen({ navigation, route }) {
       await saveManualData({ SAE_MAP: newSaeMap, LAST_BATCH_MAP: newLastBatchMap }); 
       await saveLocalSequence(storageKey, seqToUse);
 
-      Alert.alert("Éxito", `Datos guardados. Lote: ${batchId}`);
+      Alert.alert("Éxito", `Lote Generado: ${batchId}`);
       
       setHeat(""); setBundle(""); setWeight("");
       

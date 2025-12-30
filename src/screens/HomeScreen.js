@@ -3,12 +3,27 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, L
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 
+import { useFocusEffect } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
-import { getPreferredBrowser } from '../utils/storage';
+import { getPreferredBrowser, checkAndAutoClearHistory } from '../utils/storage';
 
 export default function HomeScreen({ navigation }) {
     const { user } = useContext(AuthContext);
     const role = user?.role?.toLowerCase() || 'auxiliar';
+    
+    // Auto Limpieza
+    useFocusEffect(
+        React.useCallback(() => {
+            const runCleanup = async () => {
+                const cleaned = await checkAndAutoClearHistory();
+                if (cleaned) {
+                    // Opcional: Avisar discreto o silencioso. 
+                    console.log("Limpieza de historial ejecutada.");
+                }
+            };
+            runCleanup();
+        }, [])
+    );
     
     // Permisos
     const canBulk = role !== 'auxiliar';

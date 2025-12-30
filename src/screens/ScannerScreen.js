@@ -103,7 +103,7 @@ export default function ScannerScreen({ navigation }) {
             const storageKey = `${localDateStr}_${grade}`;
             await saveLocalSequence(storageKey, seqToUse);
 
-            Alert.alert("¡Éxito!", `Lote Generado: ${batchId}\nGuardado en Historial y Hoja.`);
+            Alert.alert("¡Éxito!", `Lote Generado: ${batchId}`);
             setModalVisible(false);
             setScanned(false);
 
