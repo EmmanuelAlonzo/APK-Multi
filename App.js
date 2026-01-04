@@ -75,10 +75,15 @@ const AppContent = () => {
     );
 };
 
+import { Platform } from 'react-native'; // Asegurar import de Platform si se usa (aunque se usó en contexto, no aquí, pero por si acaso)
+import { ThemeProvider } from './src/context/ThemeContext';
+
 export default function App() {
     return (
         <AuthProvider>
-            <AppContent />
+            <ThemeProvider>
+                <AppContent />
+            </ThemeProvider>
         </AuthProvider>
     );
 }

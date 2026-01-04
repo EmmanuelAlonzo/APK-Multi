@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { ThemeContext } from '../context/ThemeContext';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ScrollView, Platform, StatusBar } from 'react-native';
 import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
@@ -6,15 +7,15 @@ import Papa from 'papaparse';
 import { fetchBulkData, getNextBatchSequence, fetchExternalBulkData } from '../utils/api';
 
 export default function BulkScreen({ navigation }) {
-    
-    const [filterGrade, setFilterGrade] = useState(''); // NEW: Filter by Grade
-    const [externalUrl, setExternalUrl] = useState(''); // NEW: External URL state
+    const { colors, isDark } = useContext(ThemeContext);
+    const [filterGrade, setFilterGrade] = useState(''); // NUEVO: Filtrar por Grado
+    const [externalUrl, setExternalUrl] = useState(''); // NUEVO: Estado de URL externa
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState('');
 
     const handleGenerate = async (isExternal = false) => {
         // Validation of sheetUrl is no longer needed as we use the stored one.
-        
+
         setLoading(true);
         setStatus('Consultando datos...');
 
@@ -23,18 +24,18 @@ export default function BulkScreen({ navigation }) {
             let rawRows;
             if (isExternal) {
                 if (!externalUrl) {
-                     throw new Error("Por favor ingresa una URL válida.");
+                    throw new Error("Por favor ingresa una URL válida.");
                 }
                 rawRows = await fetchExternalBulkData(externalUrl);
             } else {
-                 // Classic DB Fetch
-                 rawRows = await fetchBulkData();
+                // Classic DB Fetch
+                rawRows = await fetchBulkData();
             }
             // The script now returns [ { Grade: "...", ... }, ... ]
             // const rawRows = await fetchBulkData(); // OLD
-            
+
             if (!rawRows || rawRows.length === 0) {
-                 throw new Error("La hoja de datos está vacía.");
+                throw new Error("La hoja de datos está vacía.");
             }
 
             // FILTER: Remove invalid rows (Headers, Empty Weights)
@@ -43,23 +44,23 @@ export default function BulkScreen({ navigation }) {
                 // Must have valid weight, and Batch must not be header
                 return w > 0 && r.Batch && r.Batch !== 'Batch' && r.Batch !== 'Lote';
             });
-            
+
             if (rows.length === 0) {
                 throw new Error("No se encontraron registros válidos (con Peso > 0).");
             }
-            
+
             // rows is already an array of objects, no need for Papa Parse or header mapping if script does it cleanly.
             // However, script does simple clean.
             // Adjust logic below to use 'rows' directly.
 
-            // FILTERING LOGIC
-            // let rows = parsed.data; // This line is now redundant as 'rows' is already the parsed data.
+            // LÓGICA DE FILTRADO
+            // let rows = parsed.data; // Esta línea es redundante ya que 'rows' es la data analizada.
 
-            // NEW: Constraints (1. Filter Required if size >= 10, 2. Exception for small batches)
+            // NUEVO: Restricciones (1. Filtro Requerido si tamaño >= 10, 2. Excepción para lotes pequeños)
             if (!filterGrade) {
                 if (rows.length >= 10) {
                     Alert.alert(
-                        "Filtro Requerido", 
+                        "Filtro Requerido",
                         `El archivo contiene ${rows.length} registros. Para evitar errores en lotes grandes, por favor selecciona un filtro de Grado.`
                     );
                     setLoading(false);
@@ -68,14 +69,14 @@ export default function BulkScreen({ navigation }) {
                 }
                 // If < 10, strictly implicitly allowed (Test Mode)
             }
-            
+
             if (filterGrade.trim()) {
                 const target = parseFloat(filterGrade).toFixed(2); // Normalize user input
                 rows = rows.filter(row => {
                     const g = row['Grade'] || row['Grado'] || '';
                     return parseFloat(g).toFixed(2) === target;
                 });
-                
+
                 if (rows.length === 0) {
                     throw new Error(`No se encontraron registros del grado ${filterGrade}`);
                 }
@@ -85,7 +86,7 @@ export default function BulkScreen({ navigation }) {
 
             // 3. Process Data & Generate Sequences
             const processedRows = [];
-            
+
             // ... (rest of logic uses 'rows')
             const sequenceMap = {}; // Cache to avoid hitting API too hard if we can estimate? 
             // In the web app, it called API for sequence? 
@@ -102,72 +103,72 @@ export default function BulkScreen({ navigation }) {
                     const key = Object.keys(row).find(k => k.toLowerCase() === name.toLowerCase());
                     return key ? row[key] : '';
                 };
-                
+
                 const data = {
                     SAE: getCol('SAE') || 'SAE 1010',
                     Grade: getCol('Grade') || getCol('Grado') || '7.00',
                     HeatNo: getCol('HeatNo') || getCol('Colada') || '',
                     BundleNo: getCol('BundleNo') || '',
                     Weight: getCol('Weight') || getCol('Peso') || '0',
-                    // NEW: Extract Batch directly from Sheet
+                    // NUEVO: Extraer Lote directamente de la Hoja
                     ExistingBatch: getCol('Batch') || getCol('Lote') || ''
                 };
 
                 const gradeVal = data.Grade;
                 const normalizeGrade = (g) => {
-                     try {
+                    try {
                         return g ? parseFloat(g).toFixed(2) : "0.00";
-                     } catch(e) { return "0.00"; }
+                    } catch (e) { return "0.00"; }
                 };
                 const normGrade = normalizeGrade(gradeVal);
-                
+
                 let batch = '';
 
-                // STRATEGY: Use Existing Batch if Available (Recommended)
+                // ESTRATEGIA: Usar Lote Existente si Disponible (Recomendado)
                 if (data.ExistingBatch) {
                     batch = data.ExistingBatch;
                 } else {
-                    // Fallback: Generate Sequence Logic
+                    // Respaldo: Lógica de Generación de Secuencia
                     if (!sequenceMap[normGrade]) {
                         try {
                             const seqData = await getNextBatchSequence(normGrade);
                             const startSeq = seqData.seq;
                             setStatus(`Grado ${normGrade}: Iniciando en ${startSeq}...`);
-                            
+
                             sequenceMap[normGrade] = {
                                 seq: startSeq,
                                 dateStr: seqData.dateStr,
                                 baseDate: new Date()
                             };
                         } catch (e) {
-                             console.warn("Seq fetch failed, using local fallback", e);
-                             // Fallback date
-                             const now = new Date();
-                             const dStr = `${now.getFullYear().toString().slice(-2)}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}`;
-                             sequenceMap[normGrade] = { seq: 1, dateStr: dStr, baseDate: now };
+                            console.warn("Seq fetch failed, using local fallback", e);
+                            // Fallback date
+                            const now = new Date();
+                            const dStr = `${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
+                            sequenceMap[normGrade] = { seq: 1, dateStr: dStr, baseDate: now };
                         }
                     } else {
                         sequenceMap[normGrade].seq++;
                     }
-                    
+
                     // Rollover logic (locally)
-                     if (sequenceMap[normGrade].seq > 999) {
+                    if (sequenceMap[normGrade].seq > 999) {
                         sequenceMap[normGrade].seq = 1;
                     }
-    
+
                     // Format Batch
                     batch = `${sequenceMap[normGrade].dateStr}I${sequenceMap[normGrade].seq.toString().padStart(3, '0')}`;
                 }
-                
-                // SKU Logic (Updated from Image)
+
+                // Lógica de SKU (Actualizada desde Imagen)
                 const SKU_MAP = {
-                    "5.50": "10000241", 
-                    "6.00": "10000285", 
+                    "5.50": "10000241",
+                    "6.00": "10000285",
                     "6.50": "10000248",
-                    "7.00": "10000271", 
-                    "8.00": "10000003", 
+                    "7.00": "10000271",
+                    "8.00": "10000003",
                     "9.00": "10000288",
-                    "10.00": "10000287", 
+                    "10.00": "10000287",
                     "12.00": "10000240"
                 };
                 const sku = SKU_MAP[normGrade] || "00000000";
@@ -186,10 +187,10 @@ export default function BulkScreen({ navigation }) {
 
             // 5. Create PDF
             const { uri } = await Print.printToFileAsync({ html, width: 340, height: 226 }); // 120mm x 80mm
-            
+
             setStatus('Compartiendo PDF...');
             await shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-            
+
             Alert.alert("Éxito", "PDF Generado");
 
         } catch (error) {
@@ -202,18 +203,18 @@ export default function BulkScreen({ navigation }) {
     };
 
     return (
-        <View style={styles.container}>
-             <View style={styles.header}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.accent }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Text style={styles.backText}>← Volver</Text>
+                    <Text style={[styles.backText, { color: colors.headerText || '#DDD' }]}>← Volver</Text>
                 </TouchableOpacity>
-                <Text style={styles.title}>Generación Masiva</Text>
+                <Text style={[styles.title, { color: colors.headerText || '#FFF' }]}>Generación Masiva</Text>
             </View>
 
             <View style={styles.content}>
-                
-                {/* Global Grade Filter */}
-                <Text style={styles.label}>Filtrar por Grado/Medida:</Text>
+
+                {/* Filtro Global de Grado */}
+                <Text style={[styles.label, { color: colors.text }]}>Filtrar por Grado/Medida:</Text>
                 <View style={styles.gradeContainer}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {['5.50', '6.00', '6.50', '7.00', '8.00', '9.00', '10.00', '11.00', '12.00'].map((g) => (
@@ -221,45 +222,47 @@ export default function BulkScreen({ navigation }) {
                                 key={g}
                                 style={[
                                     styles.gradeButton,
-                                    filterGrade === g && styles.gradeButtonSelected
+                                    { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                                    filterGrade === g && { backgroundColor: colors.accent, borderColor: colors.accent }
                                 ]}
                                 onPress={() => setFilterGrade(filterGrade === g ? '' : g)}
                             >
                                 <Text style={[
                                     styles.gradeButtonText,
-                                    filterGrade === g && styles.gradeButtonTextSelected
+                                    { color: colors.text },
+                                    filterGrade === g && { color: 'white', fontWeight: 'bold' }
                                 ]}>{g}</Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
                 </View>
 
-                <View style={styles.divider} />
+                <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-                <View style={styles.externalSection}>
-                    <Text style={styles.sectionTitle}>Importar desde Sheet Externo</Text>
+                <View style={[styles.externalSection, { backgroundColor: colors.card }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.accent }]}>Importar desde Sheet Externo</Text>
                     <TextInput
-                        style={styles.input}
+                        style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
                         placeholder="Pegar enlace de Google Sheet aquí..."
-                        placeholderTextColor="#999"
+                        placeholderTextColor={colors.textSecondary}
                         value={externalUrl}
                         onChangeText={setExternalUrl}
                     />
-                    <TouchableOpacity 
-                        style={[styles.button, styles.externalButton, loading && styles.disabled]} 
-                        onPress={() => handleGenerate(true)} 
+                    <TouchableOpacity
+                        style={[styles.button, styles.externalButton, { borderColor: colors.inputBackground }, loading && styles.disabled]}
+                        onPress={() => handleGenerate(true)}
                         disabled={loading || !externalUrl}
                     >
-                         <Text style={styles.buttonText}>{loading ? 'Procesando...' : 'Obtener etiquetas de hoja externa'}</Text>
+                        <Text style={styles.buttonText}>{loading ? 'Procesando...' : 'Obtener etiquetas de hoja externa'}</Text>
                     </TouchableOpacity>
                 </View>
 
-                <View style={styles.divider} />
+                <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-                <Text style={styles.sectionTitle}>Generar desde Base de Datos Principal</Text>
-                
-                <TouchableOpacity 
-                    style={[styles.button, loading && styles.disabled]} 
+                <Text style={[styles.sectionTitle, { color: colors.accent }]}>Generar desde Base de Datos Principal</Text>
+
+                <TouchableOpacity
+                    style={[styles.button, { backgroundColor: colors.header, borderColor: colors.accent }, loading && styles.disabled]}
                     onPress={() => handleGenerate(false)}
                     disabled={loading}
                 >
@@ -275,10 +278,10 @@ const generateHtml = (rows) => {
         // Barcode Value
         const weightKg = parseFloat(row.Weight) || 0;
         const weightTons = (weightKg / 1000).toFixed(3); // 3 decimals for tons
-        
+
         // Ensure no spaces or special chars that break URL
         const barcodeValue = `${row.Sku}-${row.Batch}-${weightTons}`;
-        
+
         // Use bwip-js API for consistent rendering
         // bcid=code128, text=value, scale=2, height=10 (mm approx inverted?), incltext=true
         const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(barcodeValue)}&scaleY=0.5&scaleX=0.4&height=10&includeText&textxalign=center`;
@@ -413,52 +416,83 @@ const generateHtml = (rows) => {
 
 
 const styles = StyleSheet.create({
-    container: { 
-        flex: 1, 
-        backgroundColor: '#fff',
+    container: {
+        flex: 1,
+        backgroundColor: '#121212', // Dark Background
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
-    header: { padding: 20, backgroundColor: '#f5f5f5', flexDirection: 'row', alignItems: 'center' },
-    backButton: { marginRight: 15 },
-    backText: { fontSize: 16, color: '#2196F3' },
-    title: { fontSize: 20, fontWeight: 'bold' },
-    content: { padding: 20 },
-    label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
-    input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 20, color: '#000', backgroundColor: '#fff' },
-    button: { backgroundColor: '#9C27B0', padding: 15, borderRadius: 8, alignItems: 'center' },
-    buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-    gradeContainer: { flexDirection: 'row', marginBottom: 20, height: 50 },
-    gradeButton: { 
-        backgroundColor: '#eee', 
-        paddingHorizontal: 15, 
-        paddingVertical: 10, 
-        borderRadius: 20, 
-        marginRight: 10, 
-        borderWidth: 1, 
-        borderColor: '#ddd',
-        justifyContent: 'center'
+    header: {
+        padding: 20,
+        backgroundColor: '#000', // Black
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 4,
+        borderBottomWidth: 2,
+        borderBottomColor: '#D32F2F',
     },
-    gradeButtonSelected: { backgroundColor: '#2196F3', borderColor: '#2196F3' },
-    gradeButtonText: { fontSize: 16, color: '#333' },
+    backButton: { marginRight: 15 },
+    backText: { fontSize: 16, color: '#DDD' },
+    title: { fontSize: 20, fontWeight: 'bold', color: '#FFF' },
+    content: { padding: 20 },
+    label: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#E0E0E0' },
+    input: {
+        borderWidth: 1,
+        borderColor: '#444',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 20,
+        color: '#FFF',
+        backgroundColor: '#2C2C2C' // Dark Input
+    },
+    button: {
+        backgroundColor: '#000',
+        padding: 15,
+        borderRadius: 8,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#D32F2F',
+        marginTop: 10
+    },
+    buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+    gradeContainer: { flexDirection: 'row', marginBottom: 20, height: 50 },
+    gradeButton: {
+        backgroundColor: '#333',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        borderRadius: 20,
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#555'
+    },
+    gradeButtonSelected: {
+        backgroundColor: '#D32F2F',
+        borderColor: '#D32F2F'
+    },
+    gradeButtonText: { fontSize: 16, color: '#DDD' },
     gradeButtonTextSelected: { color: 'white', fontWeight: 'bold' },
-    status: { textAlign: 'center', marginBottom: 10, color: '#666' },
+    status: { textAlign: 'center', marginBottom: 10, color: '#BBB' },
     disabled: { opacity: 0.7 },
     externalSection: {
         marginBottom: 20,
+        backgroundColor: '#1E1E1E', // Dark Card
+        padding: 15,
+        borderRadius: 8,
+        elevation: 2
     },
     divider: {
         height: 1,
-        backgroundColor: '#ddd',
+        backgroundColor: '#444',
         marginVertical: 20,
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 10,
-        color: '#333',
+        color: '#D32F2F',
     },
     externalButton: {
-        backgroundColor: '#4CAF50', // Green distinct from main purple
-        marginTop: 10
+        backgroundColor: '#333',
+        borderColor: '#555',
+        borderWidth: 1
     }
 });

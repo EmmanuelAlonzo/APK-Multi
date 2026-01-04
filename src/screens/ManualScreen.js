@@ -19,187 +19,248 @@ import {
   getManualData,
   getLocalSequence,
   saveLocalSequence,
+  updateHistoryItemByBatchId,
+  getDailyEditCount,
+  incrementDailyEditCount,
 } from "../utils/storage";
 import { getNextBatchSequence, sendDataToSheet, fetchLastBatch, updateRemoteRow } from "../utils/api";
 import { AuthContext } from "../context/AuthContext";
-// PDF Generation will be handled in a separate utility or here if simple
+import { ThemeContext } from "../context/ThemeContext";
+// La generación de PDF se manejará en una utilidad separada o aquí si es simple
 
 export default function ManualScreen({ navigation, route }) {
-  const { user } = useContext(AuthContext); 
+  const { user } = useContext(AuthContext);
+  const { colors, isDark } = useContext(ThemeContext);
   const { updateSheetRow, fetchGlobalConfig, saveGlobalConfig } = require('../utils/api');
 
-  // Edit Mode Params
+  // Parámetros de Modo Edición
   const { isEditing, item } = route.params || {};
 
   const [sae, setSae] = useState(isEditing ? String(item.SAE || "") : "");
-  // Normalize grade to ensure it matches button values (e.g., "5.5" -> "5.50")
-  const formattedGrade = isEditing && item.Grade 
-        ? parseFloat(item.Grade).toFixed(2) 
-        : "7.00";
+  // Normalizar grado para asegurar que coincida con los valores de los botones (ej. "5.5" -> "5.50")
+  const formattedGrade = isEditing && item.Grade
+    ? parseFloat(item.Grade).toFixed(2)
+    : "7.00";
   const [grade, setGrade] = useState(formattedGrade);
-  
+
   const [heat, setHeat] = useState(isEditing ? String(item.HeatNo || "") : "");
   const [bundle, setBundle] = useState(isEditing ? String(item.BundleNo || item.Coil || item.coil || "") : "");
   const [weight, setWeight] = useState(isEditing ? String(item.Weight || "") : "");
-  // Fix: use local date instead of UTC to avoid date skipping in evening
-  const getLocalDate = () => {
-      const now = new Date();
-      const Y = now.getFullYear();
-      const M = (now.getMonth() + 1).toString().padStart(2, '0');
-      const D = now.getDate().toString().padStart(2, '0');
-      return `${Y}-${M}-${D}`;
-  };
 
-  const [dateStr, setDateStr] = useState(isEditing ? item.Date : getLocalDate());
-  
+  const getLocalDate = () => {
+    const now = new Date();
+    const Y = now.getFullYear();
+    const M = (now.getMonth() + 1).toString().padStart(2, '0');
+    const D = now.getDate().toString().padStart(2, '0');
+    return `${Y}-${M}-${D}`;
+  };
+  // Robust initialization for Date
+  const getInitialDate = () => {
+    if (isEditing) {
+      return item.Date || item.date || item.fecha || getLocalDate();
+    }
+    return getLocalDate();
+  };
+  const [dateStr, setDateStr] = useState(getInitialDate());
+
   const [loading, setLoading] = useState(false);
   const [prefetchedSeq, setPrefetchedSeq] = useState(null);
   const [isFetchingSeq, setIsFetchingSeq] = useState(false);
   const [lastBatchId, setLastBatchId] = useState(null);
   const [saeMap, setSaeMap] = useState({});
-  const [globalSaeMap, setGlobalSaeMap] = useState({}); // New: Store global config map
+  const [globalSaeMap, setGlobalSaeMap] = useState({}); // Nuevo: Almacenar mapa de configuración global
+  const [lastBatchMap, setLastBatchMap] = useState({}); // Nuevo: Mapa local de Últimos Lotes por Grado
+  // const [debugLogs, setDebugLogs] = useState(""); // DEBUG REMOVED
+
 
   useEffect(() => {
-    console.log("DEBUG: ManualScreen Mounted v2 - Checking fallback logic"); // Version check
+    console.log("DEBUG: ManualScreen Montado v3 - Verificando lógica de escáner");
     if (!isEditing) {
-        loadPersistedData();
+      loadPersistedData();
+
+      // --- LOGICA DE ESCÁNER ---
+      // Si venimos del escáner con datos
+      if (route.params?.scannedData) {
+        const { sae: s, grade: g, weight: w, heat: h, bundle: b } = route.params.scannedData;
+
+        if (s) setSae(s);
+        if (g) setGrade(g); // Esto disparará prefetchSequence automáticamente
+        if (w) setWeight(w);
+        if (h) setHeat(h);
+        if (b) setBundle(b);
+
+        // Opcional: Avisar al usuario
+        // Alert.alert("Escáner", "Datos cargados automáticamente.");
+      }
     }
-  }, []);
+  }, [route.params?.scannedData]);
 
   const loadPersistedData = async () => {
     const data = await getManualData();
     if (data.SAE_MAP) {
       setSaeMap(data.SAE_MAP);
-      if (data.SAE_MAP["7.00"]) {
-        setSae(data.SAE_MAP["7.00"]);
-      }
+    }
+    if (data.LAST_BATCH_MAP) {
+      setLastBatchMap(data.LAST_BATCH_MAP);
     }
   };
 
-  useEffect(() => {
-    if(!isEditing) {
-        setSae(saeMap[grade] || "");
-        prefetchSequence();
-    }
-  }, [grade, saeMap, dateStr]);
 
-  /* --- Global SAE Logic --- */
+
+  /* --- Lógica de SAE Global --- */
   const fetchConfig = async () => {
-    // Only fetch if not editing an existing item (we want to preserve its historical data)
+    // Solo buscar si no estamos editando un ítem existente
     if (isEditing) return;
-    
-    // Fetch global config
+
+    // Obtener configuración global
     const configMap = await fetchGlobalConfig();
+
     if (configMap) {
-        setGlobalSaeMap(configMap);
-        // If we have a global SAE for current grade, set it?
-        // Or wait for effect?
-        // Let's set it if current grade has one.
-        if (configMap[grade]) {
-            setSae(configMap[grade]);
+      // Verificar si realmente cambió para evitar re-renderizados innecesarios
+      // Esto previene que el useEffect dependiente de globalSaeMap se dispare y sobrescriba la entrada del usuario
+      setGlobalSaeMap(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(configMap)) {
+          return prev; // No cambiar estado si es idéntico
         }
+        return configMap;
+      });
     }
   };
 
   const handleSetGlobal = async () => {
-      if (!sae) {
-          Alert.alert("Error", "Ingresa un valor en SAE primero");
-          return;
-      }
-      setLoading(true); 
-      const success = await saveGlobalConfig(sae, grade); // Pass grade
-      setLoading(false);
-      
-      if (success) {
-          // 1. Update Global Map State immediately
-          const newGlobalMap = { ...globalSaeMap, [grade]: sae };
-          setGlobalSaeMap(newGlobalMap);
-          
-          // 2. Update Local History Map State immediately (to stay in sync)
-          const newSaeMap = { ...saeMap, [grade]: sae };
-          setSaeMap(newSaeMap);
-          // Persist local history too, so it survives reload even if fetchConfig fails
-          saveManualData({ SAE_MAP: newSaeMap }).catch(e => console.log(e));
+    if (!sae) {
+      Alert.alert("Error", "Ingresa un valor en SAE primero");
+      return;
+    }
+    setLoading(true);
+    // ESTRATEGIA DEFINITIVA: Usar prefijo "G-" para forzar tratamiento de TEXTO y evitar duplicados numéricos.
+    // Clave será "G-10.00". Esto es único y string.
+    const safeKey = `G-${grade}`;
+    const success = await saveGlobalConfig(sae, safeKey);
+    setLoading(false);
 
-          Alert.alert("Éxito", `SAE Global para Grado ${grade} actualizado`);
-      } else {
-          Alert.alert("Error", "No se pudo actualizar el SAE Global en el servidor");
-      }
+    if (success) {
+      // Actualizar mapa local con la nueva clave (y la simple para fallback visual)
+      const newGlobalMap = { ...globalSaeMap, [grade]: sae, [safeKey]: sae };
+      setGlobalSaeMap(newGlobalMap);
+
+      // ELIMINADO: No actualizar historial local aquí. 
+      // Mantener Global y Local separados asegura que si se borra el Global, 
+      // no caigamos en una copia local "fantasma" creada por la acción de Admin.
+
+      Alert.alert("Éxito", `SAE Global para Grado ${grade} actualizado`);
+    } else {
+      Alert.alert("Error", "No se pudo actualizar el SAE Global en el servidor");
+    }
   };
 
   useEffect(() => {
     if (!isEditing) {
-        loadPersistedData();
-        fetchConfig(); // Fetch global SAE
-        prefetchSequence();
+      loadPersistedData();
+      fetchConfig(); // Obtener SAE global
+      prefetchSequence();
     }
-  }, []); // Run once on mount
+  }, []); // Ejecutar una vez al montar
 
-  // ... (keeping other effects but removing duplications if any)
+  // ... (manteniendo otros efectos pero eliminando duplicados si los hay)
+
+  // Ayudante para encontrar SAE de forma robusta
+  const getSaeFromMap = (map, g) => {
+    if (!map) return null;
+
+    // 1. Intentar clave Segura con Prefijo "G-" (Prioridad Máxima)
+    if (map[`G-${g}`]) return map[`G-${g}`];
+
+    // 2. Intentar coincidencia directa
+    if (map[g]) return map[g];
+
+    // 3. Intentar normalización numérica (legacy)
+    const asNum = parseFloat(g).toString();
+    if (map[asNum]) return map[asNum];
+
+    // 4. Búsqueda profunda numérica
+    const target = parseFloat(g);
+    const key = Object.keys(map).find(k => parseFloat(k) === target);
+    if (key) return map[key];
+
+    return null;
+  };
+
+  const prevGradeRef = React.useRef(grade);
 
   useEffect(() => {
-    // Determine if we should clear prefetched seq when parameters change
-    // Logic: if grade/date changes, prefetch again.
-    if(!isEditing) {
-        // Global SAE logic: If we have a global SAE for this grade, use it.
-        // User requested Global SAE updates "everyone".
-        // If globalSaeMap has entry for this grade, prefer it over previous local input unless typed?
-        // Simplicity: When switching grade, reset to global default if exists.
-        
-        if (globalSaeMap[grade]) {
-             setSae(globalSaeMap[grade]);
-        } else if (saeMap[grade]) {
-             // Fallback to local history if no global
-             setSae(saeMap[grade]);
+    if (!isEditing) {
+      // Determinar si cambiamos de grado
+      const hasGradeChanged = prevGradeRef.current !== grade;
+      prevGradeRef.current = grade;
+
+      // Determinar SAE basado ÚNICAMENTE en Global (ignorando historial local para evitar "fantasmas")
+      const globalValue = getSaeFromMap(globalSaeMap, grade);
+
+
+      // Estrategia: "Solo Global o Vacío"
+      // Si hay valor global, úsalo. Si no, permite que el usuario escriba libremente.
+
+      if (hasGradeChanged) {
+        // Si el usuario acaba de cambiar el grado, limpiamos el campo (o ponemos el global si hay).
+        setSae(globalValue || "");
+
+        // OPTIMIZACIÓN UI: Mostrar Último Lote CACHEADO inmediatamente
+        if (lastBatchMap[grade]) {
+          setLastBatchId(lastBatchMap[grade]); // Feedback instantáneo
         } else {
-             setSae(""); // Clear if neither
+          setLastBatchId(null);
         }
-        
+
         prefetchSequence();
+      } else {
+        if (globalValue) {
+          setSae(globalValue);
+        }
+      }
     }
-  }, [grade, dateStr, globalSaeMap]); // Added globalSaeMap dependency
+  }, [grade, globalSaeMap]); // Eliminada dependencia dateStr para evitar reinicios por fecha
 
   const prefetchSequence = async () => {
-      setLastBatchId(null);
-      setPrefetchedSeq(null); 
-      setIsFetchingSeq(true);
-      try {
-           const [yIn, mIn, dIn] = dateStr.split('-').map(Number);
-           const dateObj = new Date(yIn, mIn - 1, dIn);
-           
-           // Parallel Execution for Speed
-           const dailyPromise = getNextBatchSequence(grade, dateObj);
-           const absolutePromise = fetchLastBatch(grade);
+    setLastBatchId(null);
+    setPrefetchedSeq(null);
+    setIsFetchingSeq(true);
+    try {
+      const [yIn, mIn, dIn] = dateStr.split('-').map(Number);
+      const dateObj = new Date(yIn, mIn - 1, dIn);
 
-           // Wait for both (or handle failures gracefully)
-           // We use allSettled or just all. simple all is strict, but fetchLastBatch handles its own errors returning null.
-           const [seqData, absoluteLast] = await Promise.all([dailyPromise, absolutePromise]);
+      // Ejecución Paralela para Velocidad
+      const dailyPromise = getNextBatchSequence(grade, dateObj);
+      const absolutePromise = fetchLastBatch(grade);
 
-           setPrefetchedSeq(seqData);
-           
-           let foundDaily = false;
-           if (seqData && typeof seqData.lastSeq !== 'undefined' && seqData.lastSeq !== null && seqData.lastSeq > 0) {
-              const prefix = seqData.dateStr;
-              const s = seqData.lastSeq.toString().padStart(3, "0");
-              const fullId = `${prefix}I${s}`;
-              setLastBatchId(fullId);
-              foundDaily = true;
-           }
+      // Esperar a ambos (o manejar fallos visualmente)
+      const [seqData, absoluteLast] = await Promise.all([dailyPromise, absolutePromise]);
 
-           // Fallback if daily not found
-           if (!foundDaily) {
-                if (absoluteLast && absoluteLast.trim().length > 0 && absoluteLast !== "null") {
-                    setLastBatchId(absoluteLast);
-                } else {
-                    setLastBatchId(null);
-                }
-           }
+      setPrefetchedSeq(seqData);
 
-      } catch (e) {
-          console.log("Prefetch Failed:", e);
-      } finally {
-          setIsFetchingSeq(false);
+      let foundDaily = false;
+      if (seqData && typeof seqData.lastSeq !== 'undefined' && seqData.lastSeq !== null && seqData.lastSeq > 0) {
+        const prefix = seqData.dateStr;
+        const s = seqData.lastSeq.toString().padStart(3, "0");
+        const fullId = `${prefix}I${s}`;
+        setLastBatchId(fullId);
+        foundDaily = true;
       }
+
+      // Respaldo si no se encuentra diario
+      if (!foundDaily) {
+        if (absoluteLast && absoluteLast.trim().length > 0 && absoluteLast !== "null") {
+          setLastBatchId(absoluteLast);
+        } else {
+          setLastBatchId(null);
+        }
+      }
+
+    } catch (e) {
+      console.log("Prefetch Failed:", e);
+    } finally {
+      setIsFetchingSeq(false);
+    }
   };
 
   const handleSave = async () => {
@@ -212,43 +273,110 @@ export default function ManualScreen({ navigation, route }) {
     try {
       let batchId = isEditing ? item.Batch : "UNKNOWN";
 
-      // --- EDIT MODE ---
+      // --- MODO EDICIÓN ---
       if (isEditing) {
-          const updateData = {
-              Batch: batchId, // Key
-              SAE: sae,
-              HeatNo: heat,
-              BundleNo: bundle,
-              Weight: weight,
-              // Grade, Date usually not editable easily as they define Batch ID, but we allow them to pass through
-              // If Admin changes Grade, Batch ID logically mismatch? 
-              // User requirement: "Editar los registros...". 
-              // For simplicity, we update fields on the EXISTING Batch ID. Changing Batch ID is dangerous.
-          };
+        // [NUEVO] LIMITE PARA AUXILIARES
+        if (user && (user.role === 'auxiliar' || user.role === 'Auxiliar')) {
+          const currentCount = await getDailyEditCount();
+          if (currentCount >= 10) {
+            Alert.alert("Límite Alcanzado", "Has alcanzado el límite de 10 ediciones diarias para Auxiliares.");
+            setLoading(false);
+            return;
+          }
+        }
 
-          if (route.params?.isRemote) {
-              await updateRemoteRow(batchId, updateData);
-              Alert.alert("Éxito", "Registro actualizado remotamente");
-              navigation.goBack();
-              return;
+        // 1. Datos para Historial Local (Solo claves limpias / Inglés)
+        const localData = {
+          Batch: batchId.trim(),
+          SAE: sae,
+          HeatNo: heat,
+          BundleNo: bundle,
+          Weight: weight,
+          Date: dateStr,
+          Grade: grade,
+          Operator: user ? user.name : (item.Operator || "Unknown"),
+          UniqueId: item.UniqueId || item.uniqueId || item.uid,
+        };
+
+        // 2. Datos para Google Sheet (Incluye Alias en Español)
+        const sheetPayload = {
+          ...localData,
+          "Batch ID": batchId.trim(), Lote: batchId.trim(),
+          "Heat No": heat, Colada: heat,
+          "Bundle No": bundle, Coil: bundle,
+          Peso: weight,
+          "Fecha": dateStr,
+          Grado: grade,
+          Usuario: localData.Operator
+        };
+
+        if (route.params?.isRemote) {
+          console.log("Enviando actualización remota:", JSON.stringify(sheetPayload));
+          const response = await updateRemoteRow(batchId, sheetPayload);
+          console.log("Respuesta servidor:", response);
+
+          if (response && response.success) {
+            // [NUEVO] INCREMENTAR CONTADOR
+            if (user && (user.role === 'auxiliar' || user.role === 'Auxiliar')) await incrementDailyEditCount();
+
+            Alert.alert("Éxito", "Registro actualizado remotamente");
+            navigation.goBack();
+          } else {
+            const msg = response?.error || "Error desconocido al actualizar";
+            Alert.alert("Error Remoto", msg);
+          }
+          return;
+        }
+
+        // --- EDICIÓN LOCAL ---
+        console.log("Enviando actualización hoja:", JSON.stringify(sheetPayload));
+        // Actualizar Hoja
+        const sheetResponse = await updateSheetRow(sheetPayload);
+        console.log("Respuesta hoja:", sheetResponse);
+
+        // Actualizar Historial Local
+        await updateHistoryItemByBatchId(batchId, localData);
+
+        // Validar respuesta de hoja (RESTAURADO)
+        let successSheet = false;
+        if (sheetResponse && typeof sheetResponse === 'object' && sheetResponse.success) {
+          successSheet = true;
+        } else if (typeof sheetResponse === 'string' && (sheetResponse === 'Success' || sheetResponse.includes('updated'))) {
+          successSheet = true;
+        }
+
+        if (!successSheet) {
+          // Extracción de mensaje de error
+          let errorMsg = "Respuesta desconocida del servidor";
+          if (sheetResponse && typeof sheetResponse === 'object') {
+            errorMsg = sheetResponse.error || JSON.stringify(sheetResponse);
+          } else if (typeof sheetResponse === 'string') {
+            errorMsg = sheetResponse.substring(0, 200);
           }
 
-          // Update Sheet (Local Edit)
-          await updateSheetRow(updateData);
-          
-          // Update History (Local) requires modifying the item in storage
-          // We can't easily modify one item in history list from here without a global store action or re-read.
-          // TRICK: We will not update local history here, BUT `HistoryScreen` usually reloads. 
-          // However, to be nice, we should try. 
-          // For now, let's just alert and go back.
-          Alert.alert("Éxito", "Registro actualizado");
-          navigation.goBack();
-          return;
+          Alert.alert(
+            "Guardado Parcial (Local)",
+            "Se actualizó en su dispositivo, pero NO en Google Sheets.\n\nError: " + errorMsg,
+            [{ text: "Entendido", onPress: () => navigation.goBack() }]
+          );
+        } else {
+          // [NUEVO] INCREMENTAR CONTADOR
+          if (user && (user.role === 'auxiliar' || user.role === 'Auxiliar')) await incrementDailyEditCount();
+
+
+          Alert.alert(
+            "Éxito",
+            "Registro actualizado correctamente.",
+            [{ text: "OK", onPress: () => navigation.goBack() }]
+          );
+
+        }
+        return;
       }
 
-      // --- NEW MODE ---
-      // 1. Generate Batch ID
-      // Parse selected date
+      // --- MODO NUEVO ---
+      // 1. Generar ID de Lote
+      // Parsear fecha seleccionada
       const [yIn, mIn, dIn] = dateStr.split("-").map(Number);
       const dateObj = new Date(yIn, mIn - 1, dIn);
       const yLocal = dateObj.getFullYear().toString().slice(-2);
@@ -261,9 +389,15 @@ export default function ManualScreen({ navigation, route }) {
       let seqData = null;
 
       if (prefetchedSeq) {
-          seqData = prefetchedSeq;
+        seqData = prefetchedSeq;
       } else {
-           seqData = await getNextBatchSequence(grade, dateObj);
+        // [MODO HÍBRIDO] Seguridad: Verificar secuencia en servidor antes de guardar.
+        try {
+          seqData = await getNextBatchSequence(grade, dateObj);
+        } catch (e) {
+          console.warn("Falló verificación secuencia, usando local:", e);
+          seqData = null;
+        }
       }
 
       const localSeq = await getLocalSequence(storageKey);
@@ -278,51 +412,65 @@ export default function ManualScreen({ navigation, route }) {
 
       let prefix = seqData && seqData.dateStr ? seqData.dateStr : localDateStr;
 
-      // Handle Date Rollover (if server advanced the date)
+      // [CORRECCIÓN LÓGICA FECHA]
+      // Solo cambiar fecha automáticamente si hubo desbordamiento (secuencia > 999)
+      // O si el servidor explícitamente nos dió una fecha nueva Y reinició la secuencia.
+
       let finalDateToSave = dateStr;
-      if (prefix !== localDateStr) {
-           // Parse YYMMDD to YYYY-MM-DD
-           const yy = prefix.substring(0, 2);
-           const mm = prefix.substring(2, 4);
-           const dd = prefix.substring(4, 6);
-           finalDateToSave = `20${yy}-${mm}-${dd}`;
-           Alert.alert("Aviso", `Secuencia llena. Se cambió la fecha a ${finalDateToSave}.`);
+
+      const serverDateDiffers = prefix !== localDateStr;
+
+      // CHEQUEO CRÍTICO: ¿El servidor nos está forzando un Rollover?
+      // Si la fecha cambia y la secuencia es muy baja (<= 5), asumimos rollover/nuevo día.
+
+      if (serverDateDiffers && seqToUse <= 5) {
+        // Aceptar nueva fecha por Overflow / Rollover
+        const yy = prefix.substring(0, 2);
+        const mm = prefix.substring(2, 4);
+        const dd = prefix.substring(4, 6);
+        finalDateToSave = `20${yy}-${mm}-${dd}`;
+        Alert.alert("Aviso", `Lote lleno o nuevo día. Fecha ajustada a ${finalDateToSave}.`);
+      } else {
+        // MANTENER FECHA MANUAL
+        // Ignoramos sugerencia de servidor si no es un rollover crítico.
+        prefix = localDateStr;
       }
 
-      // Check for overflow (sanity check)
-      if (seqToUse > 999) { Alert.alert("Error", "Secuencia > 999"); setLoading(false); return; }
+      // Verificar desbordamiento (comprobación de cordura)
+      if (seqToUse > 999) { Alert.alert("Error", "Secuencia llena (999). Debe avanzar fecha."); setLoading(false); return; }
 
       const s = seqToUse.toString().padStart(3, "0");
       batchId = `${prefix}I${s}`;
 
-      // 2. Prepare Data
+      // 2. Preparar Datos
       const dataToSave = {
         SAE: sae, Grade: grade, HeatNo: heat, Batch: batchId, BundleNo: bundle, Weight: weight, Date: finalDateToSave,
         Operator: user ? user.name : "Unknown",
       };
 
-      // 3. Save
-      // 3. Save
+      // 3. Guardar
+      // 3. Guardar
       await saveScanToHistory(dataToSave);
-      
-      // Await sheet sync to ensure server has the data before we potentially ask for the next sequence
-      try {
-          await sendDataToSheet(dataToSave);
-      } catch (e) {
-          console.error("Sheet Sync Error:", e);
-          Alert.alert("Advertencia", "Se guardó localmente pero falló el envío a la hoja de cálculo.");
-      }
+
+      // [OPTIMIZACIÓN] Enviar a Hoja en SEGUNDO PLANO (Fire & Forget)
+      sendDataToSheet(dataToSave).catch(e => {
+        console.error("Background Sheet Sync Error:", e);
+      });
 
       const newSaeMap = { ...saeMap, [grade]: sae };
-      setSaeMap(newSaeMap); 
-      await saveManualData({ SAE_MAP: newSaeMap }); 
+      const newLastBatchMap = { ...lastBatchMap, [grade]: batchId }; // Actualizar mapa de lotes
+
+      setSaeMap(newSaeMap);
+      setLastBatchMap(newLastBatchMap);
+
+      await saveManualData({ SAE_MAP: newSaeMap, LAST_BATCH_MAP: newLastBatchMap });
       await saveLocalSequence(storageKey, seqToUse);
 
-      Alert.alert("Éxito", `Datos guardados. Lote: ${batchId}`);
-      
+      Alert.alert("Éxito", `Lote Generado: ${batchId}`);
+
       setHeat(""); setBundle(""); setWeight("");
-      
-      // Force fresh sequence fetch next time
+
+      // Forzar obtención secuencia fresca próxima vez
       setPrefetchedSeq(null);
       prefetchSequence();
 
@@ -342,51 +490,36 @@ export default function ManualScreen({ navigation, route }) {
 
   const hasPrivilege = user && ['administrador', 'supervisor', 'verificador'].includes(user.role);
 
-  // Consolidated Effect for Grade Change & Auto-fill
-  // Refresh sequence when screen comes into focus
+  // Efecto Consolidado para Cambio de Grado y Auto-relleno
+  // Refrescar secuencia cuando la pantalla entra en foco
   useFocusEffect(
     React.useCallback(() => {
-      if(!isEditing) {
-          prefetchSequence();
+      if (!isEditing) {
+        fetchConfig(); // Asegurar que tenemos las últimas SAE Globales de otros dispositivos
+        prefetchSequence(); // También actualizar secuencia
       }
-    }, [grade, dateStr, isEditing]) // Dependencies trigger re-run if changed too, but mainly focus
+    }, [grade, dateStr, isEditing]) // Dependencias disparan re-ejecución si cambian también, pero principalmente el foco
   );
 
-  useEffect(() => {
-    if(!isEditing) {
-        // Priority 1: Global SAE for this Grade
-        if (globalSaeMap[grade]) {
-             setSae(globalSaeMap[grade]);
-        } 
-        // Priority 2: Local History Map (if no global)
-        else if (saeMap[grade]) {
-             setSae(saeMap[grade]);
-        } 
-        // Default: Empty
-        else {
-             setSae(""); 
-        }
-        
-        prefetchSequence();
-    }
-  }, [grade, globalSaeMap, saeMap]); // Ensure Date doesn't trigger unrelated SAE changes, but prefetch needs it. Removed dateStr from this dependency to separate concerns? No, prefetch needs it.
+  // ELIMINADO: useEffect duplicado que causaba conflictos con la lógica principal.
+  // La lógica principal (líneas 150-180 aprox) ya maneja 'setSae' basándose SOLO en Global.
 
-  // Separate Pre-fetch trigger to avoid overriding SAE on just date change?
-  // Actually, if date changes, SAE shouldn't change, but Sequence should.
-  // The above effect resets SAE on date change if I included dateStr?
-  // Wait, I included dateStr in the dependency array in the previous file content. 
-  // If date changes, `globalSaeMap[grade]` is still same, so it re-sets SAE to same value. Safe.
+  // ¿Disparador Pre-fetch separado para evitar sobrescribir SAE en solo cambio de fecha?
+  // Realmente, si fecha cambia, SAE no debería cambiar, pero Secuencia sí.
+  // ¿El efecto superior reinicia SAE al cambiar fecha si incluí dateStr?
+  // Espera, incluí dateStr en array dependencias en el contenido de archivo previo. 
+  // Si fecha cambia, `globalSaeMap[grade]` sigue igual, así que re-establece SAE al mismo valor. Seguro.
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.accent }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Text style={styles.backText}>← Volver</Text>
+          <Text style={[styles.backText, { color: colors.headerText || '#DDD' }]}>← Volver</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{isEditing ? `Editar Lote: ${item?.Batch}` : "Ingreso Manual"}</Text>
+        <Text style={[styles.title, { color: colors.headerText || 'white' }]}>{isEditing ? `Editar Lote: ${item?.Batch}` : "Ingreso Manual"}</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -394,26 +527,26 @@ export default function ManualScreen({ navigation, route }) {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.form}>
-          {/* Last Batch Display - Persistent */}
-          <View style={styles.infoBox}>
-              {isFetchingSeq ? (
-                  <Text style={styles.infoText}>Sincronizando secuencia...</Text>
-              ) : lastBatchId ? (
-                  <Text style={styles.infoText}>Último Lote: {lastBatchId}</Text>
-              ) : (
-                  <Text style={[styles.infoText, { color: '#888' }]}>Último Lote: --</Text>
-              )}
+          {/* Visualización Último Lote - Persistente */}
+          <View style={[styles.infoBox, { backgroundColor: colors.card, borderLeftColor: colors.accent }]}>
+            {isFetchingSeq && !lastBatchId ? (
+              <Text style={[styles.infoText, { color: colors.text }]}>Sincronizando secuencia...</Text>
+            ) : lastBatchId ? (
+              <Text style={[styles.infoText, { color: colors.text }]}>Último Lote: {lastBatchId} {isFetchingSeq ? "..." : ""}</Text>
+            ) : (
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>Último Lote: --</Text>
+            )}
           </View>
 
           {/* Date */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Fecha (YYYY-MM-DD)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Fecha (YYYY-MM-DD)</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
               value={dateStr}
               onChangeText={setDateStr}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#888"
+              placeholderTextColor={colors.textSecondary}
               returnKeyType="next"
               onSubmitEditing={() => hasPrivilege ? saeRef.current?.focus() : heatRef.current?.focus()}
               blurOnSubmit={false}
@@ -423,40 +556,37 @@ export default function ManualScreen({ navigation, route }) {
           {/* SAE - Visible only for Privileged, but state exists for all */}
           {hasPrivilege ? (
             <View style={styles.inputGroup}>
-                <Text style={styles.label}>SAE</Text>
-                <TextInput
+              <Text style={[styles.label, { color: colors.text }]}>SAE</Text>
+              <TextInput
                 ref={saeRef}
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
                 value={sae}
                 onChangeText={setSae}
                 placeholder="Ej. SAE1006"
-                placeholderTextColor="#888"
+                placeholderTextColor={colors.textSecondary}
                 returnKeyType="next"
                 onSubmitEditing={() => heatRef.current?.focus()}
                 blurOnSubmit={false}
-                />
-                <TouchableOpacity onPress={handleSetGlobal} style={{marginTop: 5, padding: 5, alignSelf: 'flex-start'}}>
-                    <Text style={{color: '#2196F3', fontSize: 13, fontWeight: 'bold'}}>
-                        ★ FIJAR COMO GLOBAL
-                    </Text>
-                </TouchableOpacity>
+              />
+              <TouchableOpacity onPress={handleSetGlobal} style={{ marginTop: 5, padding: 5, alignSelf: 'flex-start' }}>
+                <Text style={{ color: colors.accent, fontSize: 13, fontWeight: 'bold' }}>
+                  ★ FIJAR COMO GLOBAL
+                </Text>
+              </TouchableOpacity>
             </View>
           ) : (
-            // Hidden for normal users, maybe show a small label?
-            // "Eliminales ese campo" -> Remove input.
-            // Let's show a Read-Only Text so they know it's being applied.
-             <View style={styles.inputGroup}>
-                <Text style={styles.label}>SAE (Automático)</Text>
-                <Text style={{fontSize: 16, color: '#555', padding: 12, backgroundColor: '#f0f0f0', borderRadius: 8}}>
-                    {sae || "No definido"}
-                </Text>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: colors.text }]}>SAE (Automático)</Text>
+              <Text style={{ fontSize: 16, color: colors.textSecondary, padding: 12, backgroundColor: colors.inputBackground, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
+                {sae || "No definido"}
+              </Text>
             </View>
           )}
 
           {/* Grado */}
           <View style={styles.inputGroup}>
 
-            <Text style={styles.label}>Grado (Grade)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Grado (Grade)</Text>
             <View style={styles.gradeContainer}>
               {[
                 "5.50",
@@ -472,14 +602,16 @@ export default function ManualScreen({ navigation, route }) {
                   key={g}
                   style={[
                     styles.gradeButton,
-                    grade === g && styles.gradeSelected,
+                    { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                    grade === g && { backgroundColor: colors.accent, borderColor: colors.accent },
                   ]}
                   onPress={() => setGrade(g)}
                 >
                   <Text
                     style={[
                       styles.gradeText,
-                      grade === g && styles.gradeTextSelected,
+                      { color: colors.text },
+                      grade === g && { color: '#FFF', fontWeight: 'bold' },
                     ]}
                   >
                     {g}
@@ -491,14 +623,14 @@ export default function ManualScreen({ navigation, route }) {
 
           {/* Heat */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Colada (Heat)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Colada (Heat)</Text>
             <TextInput
               ref={heatRef}
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
               value={heat}
               onChangeText={setHeat}
               placeholder="Ej. 252101992"
-              placeholderTextColor="#888"
+              placeholderTextColor={colors.textSecondary}
               returnKeyType="next"
               onSubmitEditing={() => bundleRef.current?.focus()}
               blurOnSubmit={false}
@@ -507,14 +639,14 @@ export default function ManualScreen({ navigation, route }) {
 
           {/* Bundle */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Coil/Bundle</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Coil/Bundle</Text>
             <TextInput
               ref={bundleRef}
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
               value={bundle}
               onChangeText={setBundle}
               placeholder="Ej. 37"
-              placeholderTextColor="#888"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
               returnKeyType="next"
               onSubmitEditing={() => weightRef.current?.focus()}
@@ -524,14 +656,14 @@ export default function ManualScreen({ navigation, route }) {
 
           {/* Weight */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Peso (Kg)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Peso (Kg)</Text>
             <TextInput
               ref={weightRef}
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
               value={weight}
               onChangeText={setWeight}
               placeholder="Ej. 2068"
-              placeholderTextColor="#888"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
               returnKeyType="done"
               onSubmitEditing={handleSave}
@@ -540,7 +672,7 @@ export default function ManualScreen({ navigation, route }) {
 
           {/* Button */}
           <TouchableOpacity
-            style={[styles.saveButton, loading && styles.disabled, isEditing && styles.editButton]}
+            style={[styles.saveButton, { backgroundColor: colors.accent, borderColor: colors.accent }, loading && styles.disabled, isEditing && styles.editButton]}
             onPress={handleSave}
             disabled={loading}
           >
@@ -557,25 +689,29 @@ export default function ManualScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    // color handled by context
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
   header: {
     padding: 20,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#000", // Pure Black Header
     flexDirection: "row",
     alignItems: "center",
+    elevation: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: '#D32F2F', // Red Line
   },
   backButton: {
     marginRight: 15,
   },
   backText: {
     fontSize: 16,
-    color: "#2196F3",
+    color: "#DDD",
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
+    color: "white",
   },
   form: {
     padding: 20,
@@ -587,16 +723,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 8,
-    color: "#333",
+    color: "#E0E0E0", // Light Text
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#444", // Dark border
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: "#fafafa",
-    color: "#000", // Enforce black text
+    backgroundColor: "#2C2C2C", // Dark Input
+    color: "#FFF", // White Text
   },
   gradeContainer: {
     flexDirection: "row",
@@ -607,24 +743,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: "#333", // Dark Grey Button
+    borderWidth: 1,
+    borderColor: "#555"
   },
   gradeSelected: {
-    backgroundColor: "#2196F3",
+    backgroundColor: "#D32F2F",
+    borderColor: "#D32F2F"
   },
   gradeText: {
-    color: "#333",
+    color: "#EEE",
   },
   gradeTextSelected: {
     color: "white",
     fontWeight: "bold",
   },
   saveButton: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#000",
     padding: 15,
     borderRadius: 8,
     alignItems: "center",
     marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#D32F2F',
   },
   disabled: {
     opacity: 0.7,
@@ -633,22 +774,29 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 18,
     fontWeight: "bold",
+    letterSpacing: 1
   },
   editButton: {
-    backgroundColor: '#FF9800'
+    backgroundColor: '#D32F2F',
+    borderWidth: 0
   },
   infoBox: {
-    backgroundColor: '#e3f2fd',
-    padding: 10,
+    backgroundColor: '#1E1E1E', // Dark Card
+    padding: 15,
     borderRadius: 8,
     marginBottom: 20,
     borderLeftWidth: 5,
-    borderLeftColor: '#2196F3',
+    borderLeftColor: '#D32F2F',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   infoText: {
-    color: '#0d47a1',
+    color: '#FFF',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 16
   }
 });

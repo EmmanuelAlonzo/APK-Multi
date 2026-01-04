@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar, ScrollView, Switch } from 'react-native';
+import { ThemeContext } from '../context/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { saveScriptUrl, getScriptUrl, DEFAULT_SCRIPT_URL } from '../utils/storage';
+import { saveScriptUrl, getScriptUrl, DEFAULT_SCRIPT_URL, savePreferredBrowser, getPreferredBrowser } from '../utils/storage';
 
 export default function SettingsScreen({ navigation, route }) {
-    // URL is now read-only logic or just fixed. 
-    // Requirement: "Elimina la opcion de editar el script... que nadie pueda tocarlo"
-    // We will just show it as info or hide it? "que si se debe actualizar sea mediante este codigo"
-    // So we will remove the input.
-    
+    // URL ahora es lógica de solo lectura o fija.
+
     const [url, setUrl] = useState('');
+    const [selectedBrowser, setSelectedBrowser] = useState(null); // null = No seteado / Auto
     const { user, logout } = React.useContext(require('../context/AuthContext').AuthContext);
+    const { isDark, toggleTheme, colors } = React.useContext(ThemeContext);
     const { updateUserPin } = require('../utils/api');
 
     const [newPin, setNewPin] = useState('');
@@ -25,6 +25,14 @@ export default function SettingsScreen({ navigation, route }) {
     const loadSettings = async () => {
         const savedUrl = await getScriptUrl();
         setUrl(savedUrl || DEFAULT_SCRIPT_URL);
+
+        const savedBrowser = await getPreferredBrowser();
+        setSelectedBrowser(savedBrowser);
+    };
+
+    const handleSelectBrowser = async (pkg) => {
+        setSelectedBrowser(pkg);
+        await savePreferredBrowser(pkg);
     };
 
     const handleChangePin = async () => {
@@ -33,8 +41,8 @@ export default function SettingsScreen({ navigation, route }) {
             return;
         }
         if (!newPin.trim() || newPin.length < 4) {
-             Alert.alert("Error", "El PIN debe tener al menos 4 dígitos");
-             return;
+            Alert.alert("Error", "El PIN debe tener al menos 4 dígitos");
+            return;
         }
 
         setChangingPin(true);
@@ -59,17 +67,17 @@ export default function SettingsScreen({ navigation, route }) {
             "¿Estás seguro de que deseas salir?",
             [
                 { text: "Cancelar", style: "cancel" },
-                { 
-                    text: "Salir", 
-                    style: "destructive", 
+                {
+                    text: "Salir",
+                    style: "destructive",
                     onPress: async () => {
-                       await logout();
-                       // Force reset to Login to avoid staying on Settings
-                       // (since Settings exists in both Auth and App stacks)
-                       navigation.reset({
-                           index: 0,
-                           routes: [{ name: 'Login' }],
-                       });
+                        await logout();
+                        // Forzar reinicio a Login para evitar quedarse en Configuración
+                        // (ya que Configuración existe en pilas Auth y App)
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'Login' }],
+                        });
                     }
                 }
             ]
@@ -77,44 +85,95 @@ export default function SettingsScreen({ navigation, route }) {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
-                <Text style={styles.title}>Configuración</Text>
-                
-                {/* Script Info Only (No Edit) */}
-                <View style={styles.infoBox}>
-                    <Text style={styles.label}>Estado de Conexión:</Text>
-                    <Text style={styles.description}>
-                        Conectado a Google Apps Script (V9 - Global SAE)
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            <ScrollView contentContainerStyle={styles.content}>
+                <Text style={[styles.title, { color: colors.accent }]}>Configuración</Text>
+
+                {/* Solo Información de Script (No Editar) */}
+                <View style={[styles.infoBox, { backgroundColor: colors.card, borderLeftColor: colors.accent }]}>
+                    <Text style={[styles.label, { color: colors.text }]}>Estado de Conexión:</Text>
+                    <Text style={[styles.description, { color: colors.textSecondary }]}>
+                        Conectado a Google Apps Script (V10 - Edición Remota + ID Único)
                     </Text>
-                    <Text style={[styles.description, {fontSize: 10}]}>{url}</Text>
+                    <Text style={[styles.description, { fontSize: 10, color: colors.textSecondary }]}>{url}</Text>
+                </View>
+
+                {/* --- SECCIÓN TEMA --- */}
+                <View style={styles.section}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View>
+                            <Text style={[styles.label, { color: colors.text }]}>Modo Oscuro</Text>
+                            <Text style={[styles.description, { color: colors.textSecondary, marginBottom: 0 }]}>
+                                {isDark ? 'Activado' : 'Desactivado'}
+                            </Text>
+                        </View>
+                        <Switch
+                            trackColor={{ false: "#767577", true: colors.accent }}
+                            thumbColor={isDark ? "#f4f3f4" : "#f4f3f4"}
+                            ios_backgroundColor="#3e3e3e"
+                            onValueChange={toggleTheme}
+                            value={isDark}
+                        />
+                    </View>
+                </View>
+
+                {/* --- SECCIÓN NAVEGADOR PREDETERMINADO --- */}
+                <View style={styles.section}>
+                    <Text style={[styles.label, { color: colors.text }]}>Navegador para Base de Datos</Text>
+                    <Text style={[styles.description, { color: colors.textSecondary }]}>Elige con qué app abrir los enlaces:</Text>
+
+                    <View style={styles.browserOptions}>
+                        {[
+                            { name: 'Chrome', pkg: 'com.android.chrome' },
+                            { name: 'Brave', pkg: 'com.brave.browser' },
+                            { name: 'Edge', pkg: 'com.microsoft.emmx' }
+                        ].map((b) => (
+                            <TouchableOpacity
+                                key={b.name}
+                                style={[
+                                    styles.browserOption,
+                                    { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                                    selectedBrowser === b.pkg && { backgroundColor: colors.accent, borderColor: colors.accent }
+                                ]}
+                                onPress={() => handleSelectBrowser(b.pkg)}
+                            >
+                                <Text style={[
+                                    styles.browserOptionText,
+                                    { color: colors.textSecondary },
+                                    selectedBrowser === b.pkg && { color: '#FFF' }
+                                ]}>
+                                    {b.name}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </View>
 
                 {/* --- SECCIÓN CAMBIAR PIN --- */}
                 {!isInitial && user && (
                     <View style={styles.section}>
-                        <View style={styles.divider} />
-                        <Text style={styles.label}>Cambiar Contraseña (PIN)</Text>
-                        <Text style={styles.description}>
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                        <Text style={[styles.label, { color: colors.text }]}>Cambiar Contraseña (PIN)</Text>
+                        <Text style={[styles.description, { color: colors.textSecondary }]}>
                             Usuario actual: {user.name}
                         </Text>
-                        
+
                         <TextInput
-                            style={styles.input}
+                            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
                             value={newPin}
                             onChangeText={setNewPin}
                             placeholder="Nuevo PIN (ej. 1234)"
-                            placeholderTextColor="#888"
+                            placeholderTextColor={colors.textSecondary}
                             keyboardType="numeric"
                             secureTextEntry
                         />
-                         <TouchableOpacity style={[styles.button, styles.pinButton]} onPress={handleChangePin} disabled={changingPin}>
+                        <TouchableOpacity style={[styles.button, { backgroundColor: colors.accent, borderColor: colors.accent }]} onPress={handleChangePin} disabled={changingPin}>
                             <Text style={styles.buttonText}>{changingPin ? "Actualizando..." : "Actualizar PIN"}</Text>
                         </TouchableOpacity>
 
-                        <View style={styles.divider} />
-                         <TouchableOpacity style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
-                            <Text style={styles.buttonText}>Cerrar Sesión</Text>
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                        <TouchableOpacity style={[styles.button, { backgroundColor: colors.card, borderColor: colors.error }]} onPress={handleLogout}>
+                            <Text style={[styles.buttonText, { color: colors.error }]}>Cerrar Sesión</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -122,10 +181,10 @@ export default function SettingsScreen({ navigation, route }) {
 
                 {!isInitial && (
                     <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => navigation.goBack()}>
-                        <Text style={styles.cancelButtonText}>Volver</Text>
+                        <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Volver</Text>
                     </TouchableOpacity>
                 )}
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -133,7 +192,7 @@ export default function SettingsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        // backgroundColor handled by context
         paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     content: {
@@ -144,45 +203,46 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 20,
         textAlign: 'center',
+        // color handled
     },
     label: {
         fontSize: 16,
         fontWeight: 'bold',
         marginBottom: 8,
+        // color handled
     },
     description: {
         fontSize: 14,
-        color: '#666',
+        // color handled
         marginBottom: 12,
     },
     input: {
-        backgroundColor: 'white',
+        // bg, border handled
         borderWidth: 1,
-        borderColor: '#ddd',
         borderRadius: 8,
         padding: 12,
         marginBottom: 20,
-        minHeight: 80,
-        textAlignVertical: 'top',
-        color: '#000',
+        minHeight: 50,
+        // color handled
     },
     button: {
-        backgroundColor: '#2196F3',
+        // bg handled
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
         marginBottom: 10,
+        borderWidth: 1,
     },
     buttonText: {
-        color: 'white',
+        // color handled or white
         fontSize: 16,
         fontWeight: 'bold',
     },
     cancelButton: {
         backgroundColor: 'transparent',
+        borderWidth: 0,
     },
     cancelButtonText: {
-        color: '#666',
         fontSize: 16,
     },
     section: {
@@ -190,20 +250,43 @@ const styles = StyleSheet.create({
     },
     divider: {
         height: 1,
-        backgroundColor: '#ddd',
         marginBottom: 20,
     },
     pinButton: {
-        backgroundColor: '#FF9800', 
+        borderWidth: 0
     },
     logoutButton: {
-        backgroundColor: '#f44336', // Red
-        marginTop: 10,
+        borderWidth: 1
     },
     infoBox: {
-        backgroundColor: '#e3f2fd',
-        padding: 10,
+        padding: 15,
         borderRadius: 8,
-        marginBottom: 20
+        marginBottom: 20,
+        borderLeftWidth: 4,
+        elevation: 2
+    },
+    browserOptions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        marginTop: 5,
+        marginBottom: 15
+    },
+    browserOption: {
+        width: '48%',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginBottom: 10,
+        alignItems: 'center'
+    },
+    browserOptionSelected: {
+        // handled inline
+    },
+    browserOptionText: {
+        fontWeight: 'bold'
+    },
+    browserOptionTextSelected: {
+        color: '#fff'
     }
 });

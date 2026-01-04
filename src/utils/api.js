@@ -2,11 +2,11 @@ import { getScriptUrl, DEFAULT_SCRIPT_URL } from './storage';
 
 export const getActiveScriptUrl = async () => {
     const url = await getScriptUrl();
-    return url || DEFAULT_SCRIPT_URL; // Fallback to default if not set/null? 
-    // Wait, the requirement says "option from start to set sheet".
-    // If it returns null, we should probably prompt user. 
-    // But for api calls, we might want a fallback if they skip it?
-    // Let's assume if it's null, the App should redirect to Settings.
+    return url || DEFAULT_SCRIPT_URL; // Respaldo a predeterminado si no está configurado o es null
+    // Espera, el requisito dice "opción desde el inicio para configurar hoja".
+    // Si devuelve null, probablemente deberíamos preguntar al usuario.
+    // Pero para llamadas api, ¿queremos un respaldo si lo omiten?
+    // Asumamos que si es null, la App debería redirigir a Configuración.
 };
 
 export const getNextBatchSequence = async (grade, dateObj = null) => {
@@ -14,18 +14,18 @@ export const getNextBatchSequence = async (grade, dateObj = null) => {
     if (!scriptUrl) throw new Error("Script URL not configured");
 
     const now = dateObj || new Date();
-    // YYMMDD format for internal logic/return
+    // Formato YYMMDD para lógica interna/retorno
     const yStr = now.getFullYear().toString().slice(-2);
     const mStr = (now.getMonth() + 1).toString().padStart(2, '0');
     const dStr = now.getDate().toString().padStart(2, '0');
     const dateStr = `${yStr}${mStr}${dStr}`;
 
-    // YYMMDD for Query Param (Legacy script likely uses this key)
+    // YYMMDD para Parámetro de Consulta (Script legado probablemente usa esta clave)
     const queryDate = `${yStr}${mStr}${dStr}`;
 
     let url = `${scriptUrl}?grade=${grade}&date=${queryDate}&_t=${Date.now()}`;
-    
-    console.log("Fetching sequence from:", url);
+
+    console.log("Obteniendo secuencia desde:", url);
 
     try {
         const response = await fetch(url);
@@ -33,26 +33,26 @@ export const getNextBatchSequence = async (grade, dateObj = null) => {
             console.error("Network response not ok:", response.status);
             throw new Error('Network response was not ok');
         }
-        
+
         const text = await response.text();
-        console.log("Sequence API Response:", text); // DEBUG LOG
-        
+        console.log("Respuesta API Secuencia:", text); // REGISTRO DE DEPURACIÓN
+
         try {
             const data = JSON.parse(text);
-            // The script returns { "result": "success", "maxSeq": N }
-            // We need to return { seq: N+1, dateStr: ... }
+            // El script devuelve { "result": "success", "maxSeq": N }
+            // Necesitamos devolver { seq: N+1, dateStr: ... }
             let seq = 1;
             let lastSeq = null;
             if (data && typeof data.maxSeq !== 'undefined') {
                 const max = parseInt(data.maxSeq);
                 if (!isNaN(max)) {
-                    lastSeq = max; // Capture maxSeq as lastSeq
+                    lastSeq = max; // Capturar maxSeq como lastSeq
                     seq = max + 1;
                 }
             }
-            if (seq > 999) seq = 1; 
-            
-            // Check for effectiveDate from server (Date Rollover)
+            if (seq > 999) seq = 1;
+
+            // Verificar effectiveDate desde el servidor (Cambio de Fecha)
             let finalDateStr = dateStr;
             if (data && data.effectiveDate) {
                 finalDateStr = data.effectiveDate;
@@ -82,7 +82,7 @@ export const sendDataToSheet = async (data) => {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        
+
         // Google Apps Script usually returns a redirect or text.
         // fetch follows redirects by default.
         const text = await response.text();
@@ -102,14 +102,14 @@ export const fetchExternalBulkData = async (externalUrl) => {
         const url = `${scriptUrl}?action=getExternalBulkData&url=${encodeURIComponent(externalUrl)}`;
         console.log("Fetching external bulk data from:", url); // Log URL for debugging
         const response = await fetch(url);
-        
+
         if (!response.ok) throw new Error('Network response was not ok');
-        
+
         const json = await response.json();
-        
-        // Handle error returned by GAS
+
+        // Manejar error devuelto por GAS
         if (json.error) {
-            throw new Error("Server Error: " + json.error);
+            throw new Error("Error del Servidor: " + json.error);
         }
 
         return json;
@@ -129,30 +129,62 @@ export const fetchPaginatedData = async (page = 1, pageSize = 100) => {
         if (!response.ok) throw new Error('Network response was not ok');
         const json = await response.json();
         if (json.error) throw new Error(json.error);
-        
-        // NORMALIZE DATA (Handle Spanish/English Keys & Fuzzy Matching)
-        if (json.data && Array.isArray(json.data)) {
-            json.data = json.data.map(item => {
-                // Helper to find value by regex key
+
+        // DETECCIÓN ROBUSTA DE DATOS
+        let records = [];
+        if (Array.isArray(json)) {
+            records = json;
+        } else if (json.data && Array.isArray(json.data)) {
+            records = json.data;
+        } else if (json.items && Array.isArray(json.items)) {
+            records = json.items;
+        } else if (json.records && Array.isArray(json.records)) {
+            records = json.records;
+        } else if (json.result && Array.isArray(json.result)) {
+            records = json.result;
+        }
+
+
+
+        // Si encontramos registros, los mapeamos y los devolvemos en el formato esperado { data: [...], ... }
+        if (records.length > 0) {
+            const mappedData = records.map(item => {
+                // Ayudante para encontrar valor por clave regex
                 const findVal = (regex) => {
+                    if (!item) return undefined;
                     const key = Object.keys(item).find(k => regex.test(k));
                     return key ? item[key] : undefined;
                 };
 
+                // Mapeo EXACTO basado en la hoja del usuario:
+                // Fecha, Lote, Grado, SAE, Colada, Coil, Peso, Usuario, UniqueId
+
+                const batchVal = findVal(/^Lote$/i) || findVal(/(batch|lote)/i);
+                const uniqueIdVal = findVal(/^UniqueId$/i) || findVal(/(uniqueid|uuid|uid)/i) || batchVal;
+
                 return {
-                    Batch: findVal(/(batch|lote)/i) || 'N/A',
-                    Grade: findVal(/(grade|grado)/i) || '',
-                    SAE: findVal(/(sae)/i) || '',
-                    HeatNo: findVal(/(heat|heatno|colada)/i) || '',
-                    // Bundle: Look for Bundle, Coil, Rollo, Bobina, Paquete (matched anywhere in key)
-                    BundleNo: findVal(/(bundle|bundleno|coil|rollo|paquete|bobina)/i) || '',
-                    Weight: findVal(/(weight|peso)/i) || 0,
-                    Date: findVal(/(date|fecha)/i) || '',
-                    ...item // Keep original keys
+                    Batch: batchVal || 'N/A',
+                    Grade: findVal(/^Grado$/i) || findVal(/(grade|grado)/i) || '',
+                    SAE: findVal(/^SAE$/i) || findVal(/(sae)/i) || '',
+                    HeatNo: findVal(/^Colada$/i) || findVal(/(heat|heatno|colada)/i) || '',
+                    BundleNo: findVal(/^Coil$/i) || findVal(/(bundle|bundleno|coil|rollo|paquete|bobina)/i) || '',
+                    Weight: findVal(/^Peso$/i) || findVal(/(weight|peso)/i) || 0,
+                    Date: findVal(/^Fecha$/i) || findVal(/(date|fecha)/i) || '',
+                    UniqueId: uniqueIdVal || '',
+                    Usuario: findVal(/^Usuario$/i) || '',
+                    ...item
                 };
             });
+
+            // Si la respuesta original NO tenía estructura paginada, la inventamos
+            return {
+                data: mappedData,
+                page: json.page || 1,
+                total: json.total || mappedData.length,
+                totalPages: json.totalPages || 1
+            };
         }
-        
+
         return json;
     } catch (e) {
         console.error("Pagination Fetch Error:", e);
@@ -166,17 +198,25 @@ export const updateRemoteRow = async (batchId, updateData) => {
 
     try {
         const url = `${scriptUrl}?action=updateRow`;
-        const payload = { ...updateData, Batch: batchId };
-        
+        // IMPORTANTE: Enviar 'action' también en el body para que doPost lo lea correctamente y no caiga en el default (saveData)
+        const payload = { ...updateData, Batch: batchId, action: 'updateRow' };
+
         const response = await fetch(url, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
-        
+
         if (!response.ok) throw new Error('Network response was not ok');
-        const json = await response.json();
-        if (json.error) throw new Error(json.error);
-        return json;
+
+        const text = await response.text();
+        console.log("Remote Update Response:", text);
+
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            // Si el servidor devuelve texto plano (ej. "Success" o "Row updated")
+            return { result: text };
+        }
     } catch (e) {
         console.error("Remote Update Error:", e);
         throw e;
@@ -192,7 +232,7 @@ export const fetchBulkData = async () => {
         console.log("Fetching bulk data from:", url);
         const response = await fetch(url);
         if (!response.ok) throw new Error('Network response was not ok');
-        
+
         const json = await response.json();
         return json; // Should be array of objects
     } catch (error) {
@@ -214,7 +254,7 @@ export const fetchLastBatch = async (grade) => {
         const response = await fetch(url);
         const text = await response.text();
         console.log("Last Batch Response (Raw):", text); // Log response
-        return text; 
+        return text;
     } catch (error) {
         console.error("Error fetching last batch:", error);
         return null;
@@ -230,46 +270,46 @@ export const fetchUsersFromScript = async () => {
         console.log("Fetching users from:", url);
         const response = await fetch(url);
         if (!response.ok) throw new Error('Network response was not ok');
-        
+
         const json = await response.json();
         if (Array.isArray(json)) {
             return json;
         } else {
-            console.error("fetchUsersFromScript: Expected array but got", json);
+            console.error("fetchUsersFromScript: Se esperaba array pero se obtuvo", json);
             const typeVar = typeof json;
             const preview = JSON.stringify(json).substring(0, 50);
             throw new Error(`Respuesta inválida del servidor (No es array). Tipo: ${typeVar}. Contenido: ${preview}...`);
         }
     } catch (error) {
-        console.error("Error fetching users:", error);
-        throw error; // Rethrow to handle in Context
+        console.error("Error obteniendo usuarios:", error);
+        throw error; // Relanzar para manejar en Contexto
     }
 };
 
-// Deprecated: fetchSheetCsv (Removing or keeping as fallback? Removing per plan)
+// Obsoleto: fetchSheetCsv (¿Eliminando o manteniendo como respaldo? Eliminando según plan)
 export const deleteFromSheet = async (batchId, grade) => {
     const scriptUrl = await getActiveScriptUrl();
     if (!scriptUrl) return;
 
     try {
-        // We send Grade to ensure we don't delete same Batch ID from another Grade
-        // IMPORTANT: JSON.stringify drops keys with 'undefined' values. We must ensure grade is valid or null-ish but preserved if possible,
-        // but our script now REQUIRES it. If grade is missing, we shouldn't even call it, or we send a placeholder that won't match.
+        // Enviamos Grado para asegurar que no borramos el mismo ID de Lote de otro Grado
+        // IMPORTANTE: JSON.stringify descarta claves con valores 'undefined'. Debemos asegurar que grade sea válido o null-ish pero preservado si es posible,
+        // pero nuestro script ahora lo REQUIERE. Si falta grade, ni siquiera deberíamos llamarlo, o enviamos un marcador que no coincidirá.
         if (!grade) {
-             console.warn("Attempting to delete without Grade, this may be rejected by server safety check.");
+            console.warn("Intentando borrar sin Grado, esto puede ser rechazado por la verificación de seguridad del servidor.");
         }
 
         const payload = {
             action: 'delete',
             Batch: batchId,
-            Grade: grade || "" // Send empty string instead of undefined to ensure key exists
+            Grade: grade || "" // Enviar string vacío en lugar de undefined para asegurar que la clave exista
         };
 
         const response = await fetch(scriptUrl, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
-        
+
         const text = await response.text();
         console.log("Delete from sheet response:", text);
         return text;
@@ -294,7 +334,7 @@ export const updateUserPin = async (name, newPin) => {
             method: 'POST',
             body: JSON.stringify(payload)
         });
-        
+
         const text = await response.text();
         return text === "Success";
     } catch (error) {
@@ -317,10 +357,16 @@ export const updateSheetRow = async (data) => {
             method: 'POST',
             body: JSON.stringify(payload)
         });
-        
+
         const text = await response.text();
         console.log("Update sheet response:", text);
-        return text;
+
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            // Si devuelve texto simple (Success), devolverlo tal cual
+            return text;
+        }
     } catch (error) {
         console.error("Error updating sheet:", error);
         throw error;
@@ -332,7 +378,7 @@ export const fetchGlobalConfig = async () => {
     if (!scriptUrl) return null;
 
     try {
-        const url = `${scriptUrl}?action=getConfig`;
+        const url = `${scriptUrl}?action=getConfig&_t=${Date.now()}`;
         // console.log("Fetching config from:", url);
         const response = await fetch(url);
         // It should return { "7.00": "SAE1006", "5.50": "SAE...", ... }
@@ -359,7 +405,7 @@ export const saveGlobalConfig = async (saeValue, grade) => {
             method: 'POST',
             body: JSON.stringify(payload)
         });
-        
+
         const text = await response.text();
         return text === "Success";
     } catch (error) {
