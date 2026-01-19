@@ -5,6 +5,8 @@ import { AuthContext } from '../context/AuthContext';
 
 import { useFocusEffect } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { getPreferredBrowser, checkAndAutoClearHistory } from '../utils/storage';
 
 export default function HomeScreen({ navigation }) {
@@ -92,10 +94,44 @@ export default function HomeScreen({ navigation }) {
                 )}
 
                 {canViewDB && (
+                    <>
                      <TouchableOpacity style={[styles.card, styles.dbCard]} onPress={openDB}>
                         <Text style={styles.cardIcon}>☁️</Text>
                         <Text style={styles.cardTitle}>Base de Datos (Web)</Text>
                     </TouchableOpacity>
+
+                    <TouchableOpacity style={[styles.card, styles.excelCard]} onPress={async () => {
+                        const spreadSheetId = '1wWQOdv-RXnOSwBWfwVBvdu9Rf2cE5aRjNAc8cPTDp8o';
+                        const gid = '27235419';
+                        const url = `https://docs.google.com/spreadsheets/d/${spreadSheetId}/export?format=xlsx&gid=${gid}`;
+                        const fileUri = FileSystem.documentDirectory + 'Base_Datos_MP.xlsx';
+
+                        try {
+                            // 1. Descargar archivo
+                            const downloadRes = await FileSystem.downloadAsync(url, fileUri);
+                            
+                            // 2. Compartir / Guardar
+                            if (downloadRes.status === 200) {
+                                if (await Sharing.isAvailableAsync()) {
+                                    await Sharing.shareAsync(downloadRes.uri, {
+                                        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                        dialogTitle: 'Guardar Base de Datos'
+                                    });
+                                } else {
+                                    alert("La función de compartir no está disponible en este dispositivo.");
+                                }
+                            } else {
+                                alert("Error al descargar el archivo. Estado: " + downloadRes.status);
+                            }
+                        } catch (e) {
+                            console.error("Error descarga excel:", e);
+                            alert("Error al descargar: " + e.message);
+                        }
+                    }}>
+                        <Text style={styles.cardIcon}>📊</Text>
+                        <Text style={styles.cardTitle}>Descargar Excel</Text>
+                    </TouchableOpacity>
+                    </>
                 )}
             </View>
         </SafeAreaView>
@@ -193,6 +229,10 @@ const styles = StyleSheet.create({
     dbCard: {
         backgroundColor: '#1E1E1E',
         borderLeftColor: '#555' 
+    },
+    excelCard: {
+        backgroundColor: '#1E1E1E',
+        borderLeftColor: '#2E7D32' // Green for Excel
     },
     iconContainer: {
         width: 50,

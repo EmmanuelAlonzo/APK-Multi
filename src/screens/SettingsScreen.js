@@ -9,10 +9,15 @@ export default function SettingsScreen({ navigation, route }) {
     const [url, setUrl] = useState('');
     const [selectedBrowser, setSelectedBrowser] = useState(null); // null = No seteado / Auto
     const { user, logout } = React.useContext(require('../context/AuthContext').AuthContext);
-    const { updateUserPin } = require('../utils/api');
+    const { updateUserPin, getGlobalConfigDate, saveGlobalConfigDate } = require('../utils/api');
 
     const [newPin, setNewPin] = useState('');
     const [changingPin, setChangingPin] = useState(false);
+    
+    // Global Date States
+    const [globalDateInput, setGlobalDateInput] = useState('');
+    const [currentGlobalDate, setCurrentGlobalDate] = useState(null);
+    const [savingDate, setSavingDate] = useState(false);
 
     const isInitial = route.params?.isInitial ?? false;
 
@@ -26,6 +31,16 @@ export default function SettingsScreen({ navigation, route }) {
         
         const savedBrowser = await getPreferredBrowser();
         setSelectedBrowser(savedBrowser);
+        
+        // Cargar Fecha Global si es usuario privilegiado
+        if (user && ['administrador', 'supervisor', 'verificador'].includes(user.role)) {
+             getGlobalConfigDate().then(d => {
+                 if (d) {
+                     setCurrentGlobalDate(d);
+                     setGlobalDateInput(d);
+                 }
+             });
+        }
     };
 
     const handleSelectBrowser = async (pkg) => {
@@ -56,6 +71,27 @@ export default function SettingsScreen({ navigation, route }) {
             Alert.alert("Error", e.message);
         } finally {
             setChangingPin(false);
+        }
+    };
+    
+    const handleSaveGlobalDate = async () => {
+        if (!globalDateInput) return;
+        // Validación básica de formato YYYY-MM-DD
+        const regex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!regex.test(globalDateInput)) {
+            Alert.alert("Formato Inválido", "Usa YYYY-MM-DD (ej. 2026-01-18)");
+            return;
+        }
+        
+        setSavingDate(true);
+        const success = await saveGlobalConfigDate(globalDateInput);
+        setSavingDate(false);
+        
+        if (success) {
+            setCurrentGlobalDate(globalDateInput);
+            Alert.alert("Guardado", "Fecha Semilla Global actualizada.");
+        } else {
+            Alert.alert("Error", "No se pudo guardar la fecha global.");
         }
     };
 
@@ -125,6 +161,41 @@ export default function SettingsScreen({ navigation, route }) {
                         ))}
                     </View>
                 </View>
+
+                {/* --- SECCIÓN FECHA GLOBAL (Supervisores) --- */}
+                {user && ['administrador', 'supervisor', 'verificador'].includes(user.role) && (
+                    <View style={styles.section}>
+                        <View style={styles.divider} />
+                        <Text style={[styles.label, {color: '#2196F3'}]}>★ Configuración Global de Lotes</Text>
+                        <Text style={styles.description}>
+                            Establecer Fecha Inicial (Semilla) para nuevos lotes. 
+                            {'\n'}Nota: Los lotes activos (menor a 999) mantendrán su fecha actual.
+                        </Text>
+                        
+                        <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
+                             <TextInput
+                                style={[styles.input, {flex: 1, marginBottom: 0, textAlign: 'center'}]}
+                                value={globalDateInput}
+                                onChangeText={setGlobalDateInput}
+                                placeholder="YYYY-MM-DD"
+                                placeholderTextColor="#666"
+                                maxLength={10}
+                            />
+                            <TouchableOpacity 
+                                style={[styles.button, {marginBottom: 0, backgroundColor: '#2196F3', borderColor: '#1976D2'}]} 
+                                onPress={handleSaveGlobalDate}
+                                disabled={savingDate}
+                            >
+                                <Text style={styles.buttonText}>{savingDate ? "..." : "Fijar"}</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {currentGlobalDate && (
+                            <Text style={{color: '#4CAF50', fontSize: 12, marginTop: 5}}>
+                                Actual en Servidor: {currentGlobalDate}
+                            </Text>
+                        )}
+                    </View>
+                )}
 
                 {/* --- SECCIÓN CAMBIAR PIN --- */}
                 {!isInitial && user && (

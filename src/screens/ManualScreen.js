@@ -29,7 +29,7 @@ import { AuthContext } from "../context/AuthContext";
 
 export default function ManualScreen({ navigation, route }) {
   const { user } = useContext(AuthContext); 
-  const { updateSheetRow, fetchGlobalConfig, saveGlobalConfig } = require('../utils/api');
+  const { updateSheetRow, fetchGlobalConfig, saveGlobalConfig, saveGlobalConfigDate } = require('../utils/api');
 
   // Parámetros de Modo Edición
   const { isEditing, item } = route.params || {};
@@ -152,6 +152,28 @@ export default function ManualScreen({ navigation, route }) {
       }
   };
 
+  const handleSetGlobalDate = async () => {
+      // Validar formato fecha
+      const regex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!regex.test(dateStr)) {
+          Alert.alert("Formato Inválido", "La fecha debe ser YYYY-MM-DD");
+          return;
+      }
+      
+      setLoading(true);
+      const success = await saveGlobalConfigDate(dateStr);
+      setLoading(false);
+      
+      if (success) {
+          Alert.alert("Éxito", "Fecha Semilla Global actualizada. Se aplicará a todos los nuevos lotes/grados.");
+          // Forzar refresco visual
+          setManualDateOverride(false); // Ya no es override manual local, ahora es Global
+          setDateSource('global'); 
+      } else {
+          Alert.alert("Error", "No se pudo guardar la fecha global.");
+      }
+  };
+
   useEffect(() => {
     if (!isEditing) {
         loadPersistedData();
@@ -219,22 +241,72 @@ export default function ManualScreen({ navigation, route }) {
     }
   }, [grade, globalSaeMap]); // Eliminada dependencia dateStr para evitar reinicios por fecha
 
+  /* Estado para indicador de origen de fecha y bloqueo manual */
+  const [dateSource, setDateSource] = useState(null); // 'sticky' | 'global' | 'rollover' | 'manual'
+  const [manualDateOverride, setManualDateOverride] = useState(false); // [NUEVO] Flag override
+
+  const handleDateChange = (text) => {
+      setDateStr(text);
+      if (text.length === 10) { // Formato completo YYYY-MM-DD
+          setManualDateOverride(true);
+          // La UI se actualizará cuando prefetch termine y confirme manual
+      }
+  };
+
   const prefetchSequence = async () => {
       setLastBatchId(null);
       setPrefetchedSeq(null); 
+      // Si el usuario fijó manual, source es manual. Si no, reseteamos a null.
+      if (manualDateOverride) {
+          setDateSource('manual');
+      } else {
+          setDateSource(null);
+      }
+      
       setIsFetchingSeq(true);
       try {
-           const [yIn, mIn, dIn] = dateStr.split('-').map(Number);
-           const dateObj = new Date(yIn, mIn - 1, dIn);
+           // Si tenemos override, usamos la fecha del Input. Si no, Today.
+           let dateToUse = new Date(); // Default 'now'
+           if (manualDateOverride) {
+               const [my, mm, md] = dateStr.split('-').map(Number);
+               if (!isNaN(my) && !isNaN(mm) && !isNaN(md)) {
+                   dateToUse = new Date(my, mm - 1, md);
+               }
+           }
            
-           // Ejecución Paralela para Velocidad
-           const dailyPromise = getNextBatchSequence(grade, dateObj);
+           // Ejecución Paralela: Pasamos manualDateOverride como 3er argumento!
+           const dailyPromise = getNextBatchSequence(grade, dateToUse, manualDateOverride);
            const absolutePromise = fetchLastBatch(grade);
 
-           // Esperar a ambos (o manejar fallos visualmente)
+           // Esperar a ambos
            const [seqData, absoluteLast] = await Promise.all([dailyPromise, absolutePromise]);
 
            setPrefetchedSeq(seqData);
+           
+           if (seqData) {
+               // ACTUALIZACIÓN DE FECHA
+               // Solo actualizamos el Input visual si NO estamos en modo manual override
+               // O si el servidor nos dice que hubo un Rollover Crítico (aunque en manual override no debería pasar rollover auto)
+               
+               if (!manualDateOverride && seqData.dateStr) {
+                   // Convertir YYMMDD -> YYYY-MM-DD
+                   const yy = seqData.dateStr.substring(0, 2);
+                   const mm = seqData.dateStr.substring(2, 4);
+                   const dd = seqData.dateStr.substring(4, 6);
+                   const newDateStr = `20${yy}-${mm}-${dd}`;
+                   
+                   setDateStr(newDateStr);
+                   
+                   // Determinar origen
+                   if (seqData.isRollover) {
+                       setDateSource('rollover');
+                   } else if (seqData.lastSeq !== null) {
+                       setDateSource('sticky'); 
+                   } else {
+                       setDateSource('global'); 
+                   }
+               }
+           }
            
            let foundDaily = false;
            if (seqData && typeof seqData.lastSeq !== 'undefined' && seqData.lastSeq !== null && seqData.lastSeq > 0) {
@@ -245,7 +317,7 @@ export default function ManualScreen({ navigation, route }) {
               foundDaily = true;
            }
 
-           // Respaldo si no se encuentra diario
+           // Respaldo
            if (!foundDaily) {
                 if (absoluteLast && absoluteLast.trim().length > 0 && absoluteLast !== "null") {
                     setLastBatchId(absoluteLast);
@@ -373,15 +445,17 @@ export default function ManualScreen({ navigation, route }) {
       }
 
       // --- MODO NUEVO ---
+      // --- MODO NUEVO ---
       // 1. Generar ID de Lote
-      // Parsear fecha seleccionada
+      // Usamos dateStr directamente, ya que prefetchSequence() ya se encargó de poner la fecha correcta (Sticky o Global)
       const [yIn, mIn, dIn] = dateStr.split("-").map(Number);
-      const dateObj = new Date(yIn, mIn - 1, dIn);
-      const yLocal = dateObj.getFullYear().toString().slice(-2);
-      const mLocal = (dateObj.getMonth() + 1).toString().padStart(2, "0");
-      const dLocal = dateObj.getDate().toString().padStart(2, "0");
-      const localDateStr = `${yLocal}${mLocal}${dLocal}`;
-      const storageKey = `${localDateStr}_${grade}`;
+      // Re-formatear a YYMMDD para el ID
+      const yLocal = yIn.toString().slice(-2);
+      const mLocal = mIn.toString().padStart(2, "0");
+      const dLocal = dIn.toString().padStart(2, "0");
+      const batchDatePart = `${yLocal}${mLocal}${dLocal}`;
+      
+      const storageKey = `${batchDatePart}_${grade}`;
 
       let seqToUse = 1;
       let seqData = null;
@@ -389,60 +463,43 @@ export default function ManualScreen({ navigation, route }) {
       if (prefetchedSeq) {
           seqData = prefetchedSeq;
       } else {
-           // [MODO HÍBRIDO] Seguridad: Verificar secuencia en servidor antes de guardar.
+           // Fallback seguro
            try {
-               seqData = await getNextBatchSequence(grade, dateObj); 
+               const now = new Date(yIn, mIn - 1, dIn);
+               seqData = await getNextBatchSequence(grade, now); 
            } catch (e) {
-               console.warn("Falló verificación secuencia, usando local:", e);
+               console.warn("Falló verificación secuencia fallback:", e);
                seqData = null;
            }
       }
 
-      const localSeq = await getLocalSequence(storageKey);
+      // IMPORTANTE: seqData YA trae la secuencia correcta (N+1) calculada en api.js
       const serverNext = seqData ? seqData.seq : null;
-      const localNext = localSeq + 1;
-
+      // Local lo usamos solo de respaldo extremo
+      const localSeq = await getLocalSequence(storageKey);
+      
       if (serverNext) {
         seqToUse = serverNext;
       } else {
-        seqToUse = localNext;
+        seqToUse = localSeq + 1;
       }
-
-      let prefix = seqData && seqData.dateStr ? seqData.dateStr : localDateStr;
-
-      // [CORRECCIÓN LÓGICA FECHA]
-      // Solo cambiar fecha automáticamente si hubo desbordamiento (secuencia > 999)
-      // O si el servidor explícitamente nos dió una fecha nueva Y reinició la secuencia.
       
-      let finalDateToSave = dateStr;
-      
-      const serverDateDiffers = prefix !== localDateStr;
-      
-      // CHEQUEO CRÍTICO: ¿El servidor nos está forzando un Rollover?
-      // Si la fecha cambia y la secuencia es muy baja (<= 5), asumimos rollover/nuevo día.
-      
-      if (serverDateDiffers && seqToUse <= 5) { 
-            // Aceptar nueva fecha por Overflow / Rollover
-            const yy = prefix.substring(0, 2);
-            const mm = prefix.substring(2, 4);
-            const dd = prefix.substring(4, 6);
-            finalDateToSave = `20${yy}-${mm}-${dd}`;
-            Alert.alert("Aviso", `Lote lleno o nuevo día. Fecha ajustada a ${finalDateToSave}.`);
-      } else {
-            // MANTENER FECHA MANUAL
-            // Ignoramos sugerencia de servidor si no es un rollover crítico.
-             prefix = localDateStr;
+      // Validaciones finales
+      if (seqToUse > 999) { 
+          Alert.alert(
+              "Error Crítico", 
+              "Secuencia 999 excedida. El sistema debería haber hecho rollover. Intenta cambiar de grado y volver para refrescar."
+          ); 
+          setLoading(false); 
+          return; 
       }
-
-      // Verificar desbordamiento (comprobación de cordura)
-      if (seqToUse > 999) { Alert.alert("Error", "Secuencia llena (999). Debe avanzar fecha."); setLoading(false); return; }
 
       const s = seqToUse.toString().padStart(3, "0");
-      batchId = `${prefix}I${s}`;
+      batchId = `${batchDatePart}I${s}`;
 
       // 2. Preparar Datos
       const dataToSave = {
-        SAE: sae, Grade: grade, HeatNo: heat, Batch: batchId, BundleNo: bundle, Weight: weight, Date: finalDateToSave,
+        SAE: sae, Grade: grade, HeatNo: heat, Batch: batchId, BundleNo: bundle, Weight: weight, Date: dateStr, // dateStr ya es la fecha final correcta
         Operator: user ? user.name : "Unknown",
       };
 
@@ -540,17 +597,54 @@ export default function ManualScreen({ navigation, route }) {
 
           {/* Date */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Fecha (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={dateStr}
-              onChangeText={setDateStr}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#888"
-              returnKeyType="next"
-              onSubmitEditing={() => hasPrivilege ? saeRef.current?.focus() : heatRef.current?.focus()}
-              blurOnSubmit={false}
-            />
+            <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                <Text style={styles.label}>Fecha (YYYY-MM-DD)</Text>
+                {dateSource && (
+                    <Text style={{fontSize: 12, fontWeight: 'bold', color: 
+                        dateSource === 'sticky' ? '#FFC107' : // Amber
+                        dateSource === 'rollover' ? '#4CAF50' : // Green
+                        dateSource === 'global' ? '#2196F3' : // Blue
+                        dateSource === 'manual' ? '#E91E63' : '#AAA' // Pink for Manual
+                    }}>
+                        {dateSource === 'sticky' ? '🔒 Lote Activo' : 
+                         dateSource === 'rollover' ? '🔄 Nuevo Ciclo' : 
+                         dateSource === 'global' ? '★ Config. Global' : 
+                         dateSource === 'manual' ? '✎ Manual (Fijo)' : ''}
+                    </Text>
+                )}
+            </View>
+            
+            {hasPrivilege ? (
+                <View>
+                    <TextInput
+                      style={[styles.input, dateSource === 'sticky' && {borderColor: '#FFC107', borderWidth: 1}]}
+                      value={dateStr}
+                      onChangeText={handleDateChange} 
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor="#888"
+                      returnKeyType="next"
+                      onSubmitEditing={() => saeRef.current?.focus()}
+                      blurOnSubmit={false}
+                    />
+                    <TouchableOpacity onPress={handleSetGlobalDate} style={{marginTop: 5, padding: 5, alignSelf: 'flex-start'}}>
+                        <Text style={{color: '#E91E63', fontSize: 13, fontWeight: 'bold'}}>
+                            ★ FIJAR COMO GLOBAL (Todos los Grados)
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <View style={{
+                    backgroundColor: '#f0f0f0', 
+                    borderRadius: 8, 
+                    padding: 12,
+                    borderWidth: dateSource === 'sticky' ? 1 : 0,
+                    borderColor: '#FFC107'
+                }}>
+                    <Text style={{fontSize: 16, color: '#333'}}>
+                        {dateStr}
+                    </Text>
+                </View>
+            )}
           </View>
 
           {/* SAE - Visible only for Privileged, but state exists for all */}

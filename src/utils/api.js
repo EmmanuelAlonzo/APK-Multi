@@ -9,68 +9,134 @@ export const getActiveScriptUrl = async () => {
     // Asumamos que si es null, la App debería redirigir a Configuración.
 };
 
+// --- CONFIGURACIÓN GLOBAL DE FECHA Y LÓGICA DE SECUENCIA ---
+
+export const getGlobalConfigDate = async () => {
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) return null;
+    try {
+        // Usar acción 'getConfigDate' (asumiendo que Backend soporta clave/valor genérico o endpoint específico)
+        // Si no, usaremos 'getConfig' y una clave especial 'GLOBAL_SEED_DATE'
+        const url = `${scriptUrl}?action=getConfig&_t=${Date.now()}`; 
+        const response = await fetch(url);
+        const json = await response.json();
+        // El config retorna todo el mapa. Buscamos la clave especial.
+        return json['GLOBAL_SEED_DATE'] || null;
+    } catch (error) {
+        console.error("Error fetching global date:", error);
+        return null;
+    }
+};
+
+export const saveGlobalConfigDate = async (dateStr) => {
+    // dateStr formato YYYY-MM-DD
+    const scriptUrl = await getActiveScriptUrl();
+    if (!scriptUrl) return false;
+    try {
+        const payload = {
+            action: 'setConfig',
+            sae: dateStr, // Reusamos campo 'sae' para el valor
+            grade: 'GLOBAL_SEED_DATE' // Clave especial
+        };
+        const response = await fetch(scriptUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        const text = await response.text();
+        return text === "Success";
+    } catch (e) {
+        console.error("Error saving global date:", e);
+        return false;
+    }
+};
+
 export const getNextBatchSequence = async (grade, dateObj = null) => {
     const scriptUrl = await getActiveScriptUrl();
     if (!scriptUrl) throw new Error("Script URL not configured");
 
+    // Fecha Real del Sistema (Hoy)
     const now = dateObj || new Date();
-    // Formato YYMMDD para lógica interna/retorno
     const yStr = now.getFullYear().toString().slice(-2);
     const mStr = (now.getMonth() + 1).toString().padStart(2, '0');
     const dStr = now.getDate().toString().padStart(2, '0');
-    const dateStr = `${yStr}${mStr}${dStr}`;
+    const systemDateStr = `${yStr}${mStr}${dStr}`; // YYMMDD
 
-    // YYMMDD para Parámetro de Consulta (Script legado probablemente usa esta clave)
-    const queryDate = `${yStr}${mStr}${dStr}`;
-
-    let url = `${scriptUrl}?grade=${grade}&date=${queryDate}&_t=${Date.now()}`;
-    
-    console.log("Obteniendo secuencia desde:", url);
+    // 1. Obtener Último Lote (Absolute Last Batch) del Grado
+    let lastSeq = null;
+    let lastDatePrefix = null;
 
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error("Network response not ok:", response.status);
-            throw new Error('Network response was not ok');
-        }
-        
-        const text = await response.text();
-        console.log("Respuesta API Secuencia:", text); // REGISTRO DE DEPURACIÓN
-        
-        try {
-            const data = JSON.parse(text);
-            // El script devuelve { "result": "success", "maxSeq": N }
-            // Necesitamos devolver { seq: N+1, dateStr: ... }
-            let seq = 1;
-            let lastSeq = null;
-            if (data && typeof data.maxSeq !== 'undefined') {
-                const max = parseInt(data.maxSeq);
-                if (!isNaN(max)) {
-                    lastSeq = max; // Capturar maxSeq como lastSeq
-                    seq = max + 1;
-                }
+        const lastBatchFull = await fetchLastBatch(grade);
+        if (lastBatchFull && lastBatchFull.trim().length > 0 && lastBatchFull !== "null") {
+            // Parsear ID: YYMMDDISEQ (ej. 250118I045)
+            // Asumiendo formato estricto de 9 caracteres iniciales + seq
+            // O separar por 'I'
+            const parts = lastBatchFull.split('I');
+            if (parts.length === 2) {
+                lastDatePrefix = parts[0]; // YYMMDD
+                lastSeq = parseInt(parts[1], 10);
             }
-            if (seq > 999) seq = 1; 
-            
-            // Verificar effectiveDate desde el servidor (Cambio de Fecha)
-            let finalDateStr = dateStr;
-            if (data && data.effectiveDate) {
-                finalDateStr = data.effectiveDate;
-            }
-
-            return {
-                seq: seq,
-                lastSeq: lastSeq,
-                dateStr: finalDateStr
-            };
-        } catch (e) {
-            console.error("JSON Parse Error:", e);
-            throw new Error("No se pudo leer la respuesta del servidor (JSON inválido)");
         }
-    } catch (error) {
-        console.error("Error fetching sequence:", error);
-        throw error;
+    } catch (e) {
+        console.warn("Could not fetch last batch for sequence logic:", e);
     }
+
+    // 2. Determinar Fecha a Usar (Sticky Logic)
+    let targetDateStr = systemDateStr;
+    let nextSeq = 1;
+    let isRollover = false;
+
+    // --- LOGICA DE FECHA ESTRICTA (MANUAL OVERRIDE) ---
+    // Si se fuerza la fecha (ej. Admin ingresó manual), ignoramos historial Sticky.
+    if (dateObj && arguments[2] === true) { // forceStrictDate passed as 3rd arg
+        targetDateStr = systemDateStr; // Uses the passed dateObj derived string
+        // Check if this specific forced date matches the last batch date to continue sequence
+        if (lastSeq !== null && lastDatePrefix === targetDateStr) {
+             nextSeq = lastSeq + 1;
+        } else {
+             nextSeq = 1; // New date forced -> Start at 1 (or we'd need to fetch max for that specific date, but assume contiguous or new)
+        }
+    } 
+    // --- LOGICA AUTOMÁTICA (STICKY) ---
+    else if (lastSeq !== null && !isNaN(lastSeq)) {
+        if (lastSeq < 999) {
+            // STICKY: Mantener fecha anterior, incrementar secuencia
+            targetDateStr = lastDatePrefix;
+            nextSeq = lastSeq + 1;
+        } else {
+            // ROLLOVER: Limite alcanzado -> Usar Fecha Real (Hoy), reiniciar secuencia
+            //targetDateStr = systemDateStr; // Ya seteado por defecto (System Date)
+            nextSeq = 1;
+            isRollover = true;
+            console.log(`Rollover triggered for Grade ${grade}. Resetting to ${systemDateStr}-001`);
+        }
+    } else {
+        // NUEVO GRADO (Sin historial) -> Usar FECHA GLOBAL si existe
+        // Consultar Fecha Global
+        try {
+            const globalSeedRaw = await getGlobalConfigDate(); // YYYY-MM-DD
+            if (globalSeedRaw) {
+                // Convertir YYYY-MM-DD a YYMMDD
+                const [gy, gm, gd] = globalSeedRaw.split('-');
+                targetDateStr = `${gy.slice(-2)}${gm}${gd}`;
+                console.log(`Using Global Seed Date for new Grade ${grade}: ${targetDateStr}`);
+            } else {
+                 console.log(`No Global Seed. Using System Date for new Grade ${grade}: ${targetDateStr}`);
+            }
+        } catch (e) {
+            console.warn("Failed to get global seed, defaulting to system date:", e);
+        }
+        nextSeq = 1;
+    }
+
+    // Retorno simulado (Ya no llamamos al endpoint legacy de secuencia porque calculamos localmente/híbrido)
+    // Pero para mantener compatibilidad, retornamos estructura esperada
+    return {
+        seq: nextSeq,
+        lastSeq: lastSeq,
+        dateStr: targetDateStr,
+        isRollover: isRollover
+    };
 };
 
 export const sendDataToSheet = async (data) => {

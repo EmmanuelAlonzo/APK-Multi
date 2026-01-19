@@ -77,6 +77,14 @@ Para generar el archivo instalable con la protección Hermes activada:
 
 ---
 
+## 📝 Notas de Versión (v1.1.0) - Actualización de Lógica de Fechas
+- **Feat (Fechas):** Implementación de **"Sticky Date"** (Fecha Persistente). Los lotes mantienen la fecha del último lote ingresado hasta que la secuencia llega a 999.
+- **Feat (Fechas):** **"Global Seed Date"**. Supervisores pueden fijar una fecha inicial global desde Configuración o Ingreso Manual.
+- **Feat (Fechas):** **Bloqueo por Rol**. El campo Fecha ahora es de solo lectura para usuarios no privilegiados.
+- **Feat (Fechas):** **Manual Override**. Al fijar una fecha manualmente y presionar "Fijar Global", esta se convierte en la nueva semilla para todos los grados nuevos.
+- **Feat (Export):** Botón para exportar base de datos a Excel directamente desde la App.
+- **UI:** Indicadores visuales de origen de fecha (Lote Activo, Nuevo Ciclo, Global, Manual).
+
 ## 📝 Notas de Versión (v1.0.3)
 - **Feat:** Nuevo selector de usuarios ("Modal") independiente del tema del sistema.
 - **Fix:** Corrección de visibilidad en escáner y login (textos negros sobre fondo oscuro corregidos).
