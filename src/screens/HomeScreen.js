@@ -12,6 +12,7 @@ import { getPreferredBrowser, checkAndAutoClearHistory } from '../utils/storage'
 export default function HomeScreen({ navigation }) {
     const { user } = useContext(AuthContext);
     const role = user?.role?.toLowerCase() || 'auxiliar';
+    const [isSharing, setIsSharing] = React.useState(false);
     
     // Auto Limpieza
     useFocusEffect(
@@ -101,37 +102,45 @@ export default function HomeScreen({ navigation }) {
                         <Text style={styles.cardTitle}>Base de Datos (Web)</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={[styles.card, styles.excelCard]} onPress={async () => {
-                        const spreadSheetId = '1wWQOdv-RXnOSwBWfwVBvdu9Rf2cE5aRjNAc8cPTDp8o';
-                        const gid = '27235419';
-                        const url = `https://docs.google.com/spreadsheets/d/${spreadSheetId}/export?format=xlsx&gid=${gid}`;
-                        
-                        if (Platform.OS === 'web') {
-                            Linking.openURL(url);
-                        } else {
-                            const fileUri = FileSystem.documentDirectory + 'Base_Datos_MP.xlsx';
+                    <TouchableOpacity 
+                        style={[styles.card, styles.excelCard, isSharing && { opacity: 0.5 }]} 
+                        disabled={isSharing}
+                        onPress={async () => {
+                            if (isSharing) return;
+                            setIsSharing(true);
+                            const spreadSheetId = '1wWQOdv-RXnOSwBWfwVBvdu9Rf2cE5aRjNAc8cPTDp8o';
+                            const gid = '27235419';
+                            const url = `https://docs.google.com/spreadsheets/d/${spreadSheetId}/export?format=xlsx&gid=${gid}`;
+                            
                             try {
-                                const downloadRes = await FileSystem.downloadAsync(url, fileUri);
-                                if (downloadRes.status === 200) {
-                                    if (await Sharing.isAvailableAsync()) {
-                                        await Sharing.shareAsync(downloadRes.uri, {
-                                            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                            dialogTitle: 'Guardar Base de Datos'
-                                        });
-                                    } else {
-                                        alert("La función de compartir no está disponible en este dispositivo.");
-                                    }
+                                if (Platform.OS === 'web') {
+                                    Linking.openURL(url);
                                 } else {
-                                    alert("Error al descargar el archivo. Estado: " + downloadRes.status);
+                                    const fileUri = FileSystem.documentDirectory + 'Base_Datos_MP.xlsx';
+                                    const downloadRes = await FileSystem.downloadAsync(url, fileUri);
+                                    if (downloadRes.status === 200) {
+                                        if (await Sharing.isAvailableAsync()) {
+                                            await Sharing.shareAsync(downloadRes.uri, {
+                                                mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                                dialogTitle: 'Guardar Base de Datos'
+                                            });
+                                        } else {
+                                            alert("La función de compartir no está disponible en este dispositivo.");
+                                        }
+                                    } else {
+                                        alert("Error al descargar el archivo. Estado: " + downloadRes.status);
+                                    }
                                 }
                             } catch (e) {
                                 console.error("Error descarga excel:", e);
                                 alert("Error al descargar: " + e.message);
+                            } finally {
+                                setIsSharing(false);
                             }
-                        }
-                    }}>
-                        <Text style={styles.cardIcon}>📊</Text>
-                        <Text style={styles.cardTitle}>Descargar Excel</Text>
+                        }}
+                    >
+                        <Text style={styles.cardIcon}>{isSharing ? '⏳' : '📊'}</Text>
+                        <Text style={styles.cardTitle}>{isSharing ? 'Descargando...' : 'Descargar Excel'}</Text>
                     </TouchableOpacity>
                     </>
                 )}
