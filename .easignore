@@ -7,3 +7,9 @@ ios/
 .git/
 *.tgz
 *.tar.gz
+
+# Electron Builds
+dist-electron/
+electron/dist/
+*.exe
+*.asar

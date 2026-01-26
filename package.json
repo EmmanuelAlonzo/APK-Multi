@@ -10,9 +10,7 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "electron:dev": "concurrently \"expo start --web\" \"wait-on http://localhost:8081 && electron .\"",
-    "electron:build": "npx expo export --platform web && electron-builder --dir"
+    "web": "expo start --web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -20,7 +18,6 @@
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/native": "^7.1.25",
     "@react-navigation/stack": "^7.6.12",
-    "electron-serve": "^3.0.0",
     "expo": "~54.0.31",
     "expo-asset": "~12.0.12",
     "expo-camera": "~17.0.10",
@@ -41,31 +38,6 @@
     "react-native-web": "^0.21.0"
   },
   "private": true,
-  "build": {
-    "appId": "com.emman.apkmulti.desktop",
-    "productName": "Control MP - Multi Steel",
-    "extraMetadata": {
-      "main": "electron/main.js"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "assets/splash-icon.png"
-    },
-    "directories": {
-      "output": "dist-electron"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/main.js",
-      "package.json",
-      "assets/**/*"
-    ],
-    "extends": null
-  },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "electron": "^40.0.0",
-    "electron-builder": "^26.4.0",
-    "wait-on": "^9.0.3"
   }
 }
