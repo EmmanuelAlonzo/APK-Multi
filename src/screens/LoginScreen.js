@@ -56,7 +56,8 @@ export default function LoginScreen({ navigation }) {
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView 
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                behavior={Platform.OS === "ios" ? "padding" : (Platform.OS === 'web' ? undefined : "height")}
+                enabled={Platform.OS !== 'web'}
                 style={{ flex: 1 }}
             >
                 <ScrollView contentContainerStyle={styles.content}>

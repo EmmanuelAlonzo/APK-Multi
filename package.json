@@ -1,20 +1,27 @@
 {
   "name": "apk",
   "version": "1.0.0",
+  "homepage": "./",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "electron:dev": "concurrently \"expo start --web\" \"wait-on http://localhost:8081 && electron .\"",
+    "electron:build": "npx expo export --platform web && electron-builder --dir"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "2.2.0",
+    "@expo/metro-runtime": "~6.1.2",
+    "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/native": "^7.1.25",
     "@react-navigation/stack": "^7.6.12",
+    "electron-serve": "^3.0.0",
     "expo": "~54.0.31",
+    "expo-asset": "~12.0.12",
     "expo-camera": "~17.0.10",
+    "expo-constants": "~18.0.13",
     "expo-file-system": "~19.0.21",
     "expo-linking": "~8.0.11",
     "expo-print": "~15.0.8",
@@ -23,10 +30,39 @@
     "expo-web-browser": "~15.0.10",
     "papaparse": "^5.5.3",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.16.0"
+    "react-native-screens": "~4.16.0",
+    "react-native-web": "^0.21.0"
   },
-  "private": true
+  "private": true,
+  "build": {
+    "appId": "com.emman.apkmulti.desktop",
+    "productName": "Control MP - Multi Steel",
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/splash-icon.png"
+    },
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/main.js",
+      "package.json",
+      "assets/**/*"
+    ],
+    "extends": null
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.4.0",
+    "wait-on": "^9.0.3"
+  }
 }

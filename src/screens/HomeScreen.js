@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Linking, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 
@@ -63,6 +63,7 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
             </View>
 
+            <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.grid}>
                 <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Scanner')}>
                     <Text style={styles.cardIcon}>📷</Text>
@@ -104,28 +105,29 @@ export default function HomeScreen({ navigation }) {
                         const spreadSheetId = '1wWQOdv-RXnOSwBWfwVBvdu9Rf2cE5aRjNAc8cPTDp8o';
                         const gid = '27235419';
                         const url = `https://docs.google.com/spreadsheets/d/${spreadSheetId}/export?format=xlsx&gid=${gid}`;
-                        const fileUri = FileSystem.documentDirectory + 'Base_Datos_MP.xlsx';
-
-                        try {
-                            // 1. Descargar archivo
-                            const downloadRes = await FileSystem.downloadAsync(url, fileUri);
-                            
-                            // 2. Compartir / Guardar
-                            if (downloadRes.status === 200) {
-                                if (await Sharing.isAvailableAsync()) {
-                                    await Sharing.shareAsync(downloadRes.uri, {
-                                        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                        dialogTitle: 'Guardar Base de Datos'
-                                    });
+                        
+                        if (Platform.OS === 'web') {
+                            Linking.openURL(url);
+                        } else {
+                            const fileUri = FileSystem.documentDirectory + 'Base_Datos_MP.xlsx';
+                            try {
+                                const downloadRes = await FileSystem.downloadAsync(url, fileUri);
+                                if (downloadRes.status === 200) {
+                                    if (await Sharing.isAvailableAsync()) {
+                                        await Sharing.shareAsync(downloadRes.uri, {
+                                            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                            dialogTitle: 'Guardar Base de Datos'
+                                        });
+                                    } else {
+                                        alert("La función de compartir no está disponible en este dispositivo.");
+                                    }
                                 } else {
-                                    alert("La función de compartir no está disponible en este dispositivo.");
+                                    alert("Error al descargar el archivo. Estado: " + downloadRes.status);
                                 }
-                            } else {
-                                alert("Error al descargar el archivo. Estado: " + downloadRes.status);
+                            } catch (e) {
+                                console.error("Error descarga excel:", e);
+                                alert("Error al descargar: " + e.message);
                             }
-                        } catch (e) {
-                            console.error("Error descarga excel:", e);
-                            alert("Error al descargar: " + e.message);
                         }
                     }}>
                         <Text style={styles.cardIcon}>📊</Text>
@@ -134,6 +136,7 @@ export default function HomeScreen({ navigation }) {
                     </>
                 )}
             </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -247,16 +250,15 @@ const styles = StyleSheet.create({
         fontSize: 24,
         color: 'white', 
     },
-    cardIcon: {
-        fontSize: 32,
-        marginBottom: 10,
-        color: '#D32F2F' 
-    },
     cardTitle: {
         fontSize: 15,
         fontWeight: 'bold',
         color: '#EEE', // Light Text
         textAlign: 'center',
         marginTop: 5
+    },
+    scrollContent: {
+        flexGrow: 1,
+        paddingBottom: 40
     }
 });

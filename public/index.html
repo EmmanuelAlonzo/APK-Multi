@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>APK</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+    <!-- CONFIGURACIÓN DE RUTAS RELATIVAS PARA ELECTRON -->
+    <base href="./" />
+    <!-- POLYFILL PARA VARIABLES DE NODEJS -->
+    <script>
+      // Polyfill agresivo para Electron/Web
+      var __dirname = "/";
+      var __filename = "";
+      var process = {
+        env: { NODE_ENV: "production" },
+        platform: "win32",
+        type: "renderer",
+        cwd: function() { return "/"; },
+        version: ''
+      };
+      
+      // Shim de path para t.join error
+      var path = {
+        join: function() {
+          var parts = [];
+          for (var i = 0; i < arguments.length; i++) {
+            var arg = arguments[i];
+            if (typeof arg === 'string') {
+              var split = arg.split(/[\\/]/);
+              for (var j = 0; j < split.length; j++) {
+                if (split[j] && split[j] !== '.') parts.push(split[j]);
+              }
+            }
+          }
+          return parts.join('/');
+        },
+        resolve: function() { return '/'; },
+        sep: '/',
+        delimiter: ':'
+      };
+
+      var global = window;
+      var module = { exports: {} };
+      var exports = module.exports;
+
+      // Exponer globales
+      window.__dirname = __dirname;
+      window.__filename = __filename;
+      window.process = process;
+      window.global = global;
+      window.path = path;
+      window.module = module;
+      window.exports = exports;
+
+      // Shim básico de require para interceptar 'path'
+      window.require = function(mod) {
+        if (mod === 'path') return path;
+        if (mod === 'electron') return { ipcRenderer: { on: function(){}, send: function(){}, invoke: function(){} } }; // Dummy
+        console.warn('Require not polyfilled for: ' + mod);
+        return {};
+      };
+    </script>
+    <link rel="icon" href="./favicon.ico" />
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+    <!-- Scripts serán inyectados por Expo CLI durante el build -->
+  </body>
+</html>

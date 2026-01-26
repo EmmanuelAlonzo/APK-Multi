@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getScriptUrl } from './src/utils/storage';
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
 
@@ -76,9 +77,65 @@ const AppContent = () => {
 };
 
 export default function App() {
+    const [isLocked, setIsLocked] = useState(false);
+    const [isLoadingLock, setIsLoadingLock] = useState(true);
+
+    // --- KILL SWITCH CONFIG ---
+    // Shared Gist with Reclamos_Multi
+    const CONFIG_URL = "https://gist.githubusercontent.com/EmmanuelAlonzo/fc6b020ef1b8b970d8b9dbfee84556b3/raw/status.json"; 
+
+    useEffect(() => {
+        checkLockStatus();
+    }, []);
+
+    const checkLockStatus = async () => {
+        try {
+            // 1. Check Local (Sticky)
+            const stored = await AsyncStorage.getItem('KILL_SWITCH_STATUS');
+            if (stored === 'LOCKED') {
+                setIsLocked(true);
+            }
+
+            // 2. Check Remote
+            console.log("Checking remote lock status...");
+            const response = await fetch(CONFIG_URL, { cache: "no-store" });
+            const data = await response.json();
+            
+            if (data.enabled === false) {
+                setIsLocked(true);
+                await AsyncStorage.setItem('KILL_SWITCH_STATUS', 'LOCKED');
+            } else {
+                setIsLocked(false);
+                await AsyncStorage.removeItem('KILL_SWITCH_STATUS');
+            }
+
+        } catch (e) {
+            console.log("Lock check failed:", e);
+        } finally {
+            setIsLoadingLock(false);
+        }
+    };
+
+    if (isLoadingLock) return null; // Or splash
+
+    if (isLocked) {
+        return (
+            <View style={styles.lockedContainer}>
+                <Text style={styles.lockedTitle}>⛔ Acceso Denegado</Text>
+                <Text style={styles.lockedText}>Esta aplicación ha sido desactivada.</Text>
+            </View>
+        );
+    }
+
     return (
         <AuthProvider>
             <AppContent />
         </AuthProvider>
     );
 }
+
+const styles = StyleSheet.create({
+  lockedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222', padding: 20 },
+  lockedTitle: { fontSize: 28, fontWeight: 'bold', color: 'red', marginBottom: 20 },
+  lockedText: { fontSize: 18, color: 'white', textAlign: 'center' }
+});

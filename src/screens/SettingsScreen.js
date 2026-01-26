@@ -96,26 +96,31 @@ export default function SettingsScreen({ navigation, route }) {
     };
 
     const handleLogout = async () => {
-        Alert.alert(
-            "Cerrar Sesión",
-            "¿Estás seguro de que deseas salir?",
-            [
-                { text: "Cancelar", style: "cancel" },
-                { 
-                    text: "Salir", 
-                    style: "destructive", 
-                    onPress: async () => {
-                       await logout();
-                       // Forzar reinicio a Login para evitar quedarse en Configuración
-                       // (ya que Configuración existe en pilas Auth y App)
-                       navigation.reset({
-                           index: 0,
-                           routes: [{ name: 'Login' }],
-                       });
+        if (Platform.OS === 'web') {
+            if (window.confirm("¿Estás seguro de que deseas salir?")) {
+                await logout();
+                navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+            }
+        } else {
+            Alert.alert(
+                "Cerrar Sesión",
+                "¿Estás seguro de que deseas salir?",
+                [
+                    { text: "Cancelar", style: "cancel" },
+                    { 
+                        text: "Salir", 
+                        style: "destructive", 
+                        onPress: async () => {
+                           await logout();
+                           navigation.reset({
+                               index: 0,
+                               routes: [{ name: 'Login' }],
+                           });
+                        }
                     }
-                }
-            ]
-        );
+                ]
+            );
+        }
     };
 
     return (

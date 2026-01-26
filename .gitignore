@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Electron Builds (Blocking Large Files)
+dist-electron/
+electron/dist/
+*.exe
+*.asar
+win-unpacked/

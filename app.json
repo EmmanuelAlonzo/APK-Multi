@@ -2,6 +2,7 @@
   "expo": {
     "name": "APK",
     "slug": "APK",
+    "entryPoint": "./index.js",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -38,12 +39,16 @@
           "cameraPermission": "Permitir a APK escanear códigos QR."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
         "projectId": "09fa436d-1348-4ec0-bfd4-f5a90164d3ba"
       }
+    },
+    "experiments": {
+      "baseUrl": "./"
     }
   }
 }
