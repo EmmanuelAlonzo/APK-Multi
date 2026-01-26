@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "homepage": "./",
   "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
