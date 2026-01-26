@@ -21,6 +21,9 @@ Aplicación móvil desarrollada en **React Native (Expo)** para el control, esca
 ### 3. 🔒 Seguridad y Ofuscación
 - **Protección de Código:** Motor **Hermes** habilitado con compilación de bytecode.
 - **Anti-Ingeniería Inversa:** El código fuente (`index.android.bundle`) es ilegible en el APK de producción.
+- **Kill Switch (Bloqueo Remoto):** Mecanismo de seguridad que consulta un archivo JSON remoto (Gist) al inicio. Permite desactivar la aplicación globalmente instantáneamente en caso de robo de código o abuso.
+    - **Modo Fail-Open:** Si no hay internet, respeta el último estado conocido.
+    - **Sticky Lock:** Una vez bloqueada, la app permanece inutilizable localmente hasta nueva orden.
 - **Gestión de Sesiones:** Login con PIN y lista de usuarios sincronizada.
 
 ### 4. ☁️ Sincronización Cloud
@@ -76,6 +79,11 @@ Para generar el archivo instalable con la protección Hermes activada:
    - Confirmar que el contenido es binario (Hermes Bytecode) y no texto plano.
 
 ---
+
+## 📝 Notas de Versión (v1.1.1) - Fixes & Seguridad
+- **Sec (Kill Switch):** Documentación e implementación de sistema de apagado remoto vía Gist.
+- **Fix (Excel):** Solución a error "Call to function 'ExpoSharing.shareAsync' has been rejected" bloqueando múltiples clics simultáneos en el botón de descarga.
+- **UI:** Mejoras en feedback visual durante descargas.
 
 ## 📝 Notas de Versión (v1.1.0) - Actualización de Lógica de Fechas
 - **Feat (Fechas):** Implementación de **"Sticky Date"** (Fecha Persistente). Los lotes mantienen la fecha del último lote ingresado hasta que la secuencia llega a 999.
